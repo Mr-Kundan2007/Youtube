@@ -1,4 +1,5 @@
 import path from "path"
+import mongoose from "mongoose"
 import Meeting from "../Modals/Meeting.js"
 import MeetingRecording from "../Modals/MeetingRecording.js"
 import User from "../Modals/Auth.js"
@@ -8,6 +9,11 @@ import { ApiError } from "../utils/apiError.js"
 import { sendSuccess, sendError } from "../utils/apiResponse.js"
 import { logger, MeetingEvents } from "../utils/logger.js"
 import { MeetingRoles } from "../services/videoTokenService.js"
+import { meetingStore } from "../services/meetingStore.js"
+
+const inMemoryRecordings = new Map()
+
+const isDbReady = () => Boolean(mongoose.connection && mongoose.connection.readyState === 1)
 
 /**
  * Validates whether the requesting user has permission to record in this meeting.
@@ -151,17 +157,23 @@ export const uploadRecording = async (req, res) => {
 
     const { title, duration, resolution, startedAt, endedAt, participantCount } = req.body
 
-    // Retrieve creator details
-    let creatorName = "Host"
-    const user = await User.findById(req.user.id)
-    if (user) {
-      creatorName = user.channelname || user.name || "Host"
+    // Retrieve creator details safely
+    let creatorName = req.user?.channelname || req.user?.name || "Host"
+    if (isDbReady() && req.user?.id && mongoose.Types.ObjectId.isValid(req.user.id)) {
+      try {
+        const user = await User.findById(req.user.id)
+        if (user) {
+          creatorName = user.channelname || user.name || creatorName
+        }
+      } catch {}
     }
 
-    const recording = new MeetingRecording({
-      meetingId: meeting._id,
+    const recId = new mongoose.Types.ObjectId().toString()
+    const recordingData = {
+      _id: recId,
+      meetingId: meeting._id || meeting.roomId,
       roomId: meeting.roomId,
-      title: title?.trim() || `${meeting.title} - Recording`,
+      title: title?.trim() || `${meeting.title || "Meeting"} - Recording`,
       createdBy: req.user.id,
       creatorName,
       filename: file.filename,
@@ -181,22 +193,36 @@ export const uploadRecording = async (req, res) => {
       endedAt: endedAt ? new Date(endedAt) : new Date(),
       participantCount: parseInt(participantCount, 10) || 1,
       accessPolicy: "HOST_ONLY",
-    })
+      createdAt: new Date(),
+    }
 
-    await recording.save()
+    if (isDbReady()) {
+      try {
+        const recording = new MeetingRecording(recordingData)
+        await recording.save()
+      } catch (err) {
+        logger.warn("[Recording] Failed to persist to Mongo, keeping in memory:", err.message)
+      }
+    }
+
+    inMemoryRecordings.set(recId, recordingData)
 
     meeting.recording = meeting.recording || {}
     meeting.recording.status = "completed"
-    meeting.recording.activeRecordingId = recording._id
-    meeting.recording.fileUrl = `/api/recordings/${recording._id}`
-    await meeting.save()
+    meeting.recording.activeRecordingId = recId
+    meeting.recording.fileUrl = `/api/recordings/${recId}`
+    if (typeof meeting.save === "function") {
+      await meeting.save().catch(() => {})
+    } else {
+      await meetingStore.updateMeeting(meeting.roomId, { recording: meeting.recording }).catch(() => {})
+    }
 
     logger.info(MeetingEvents.RECORDING_UPLOADED, {
       roomId: meeting.roomId,
-      recordingId: recording._id,
+      recordingId: recId,
       filename: file.filename,
       fileSize: file.size,
-      duration: recording.duration,
+      duration: recordingData.duration,
       uploadedBy: req.user.id,
     })
 
@@ -204,15 +230,15 @@ export const uploadRecording = async (req, res) => {
       res,
       {
         recording: {
-          id: recording._id,
-          recordingId: recording._id,
-          roomId: recording.roomId,
-          title: recording.title,
-          duration: recording.duration,
-          fileSize: recording.fileSize,
-          status: recording.status,
-          createdAt: recording.createdAt,
-          creatorName: recording.creatorName,
+          id: recId,
+          recordingId: recId,
+          roomId: recordingData.roomId,
+          title: recordingData.title,
+          duration: recordingData.duration,
+          fileSize: recordingData.fileSize,
+          status: recordingData.status,
+          createdAt: recordingData.createdAt,
+          creatorName: recordingData.creatorName,
         },
       },
       201
@@ -230,7 +256,10 @@ export const uploadRecording = async (req, res) => {
 export const getMeetingRecordings = async (req, res) => {
   try {
     const roomId = req.params.roomId
-    const meeting = req.meeting || (await Meeting.findOne({ roomId }))
+    let meeting = req.meeting
+    if (!meeting) {
+      meeting = await meetingStore.findMeeting(roomId)
+    }
     if (!meeting) {
       throw ApiError.notFound("MEETING_NOT_FOUND", "Meeting room not found")
     }
@@ -240,17 +269,36 @@ export const getMeetingRecordings = async (req, res) => {
       req.userRole === MeetingRoles.HOST ||
       req.userRole === MeetingRoles.CO_HOST
 
-    // Regular participants can only view if accessPolicy is not strictly HOST_ONLY
-    const query = {
-      roomId: meeting.roomId,
-      status: { $ne: "DELETED" },
+    let recordings = []
+    if (isDbReady()) {
+      try {
+        const query = {
+          roomId: meeting.roomId,
+          status: { $ne: "DELETED" },
+        }
+        if (!isHostOrCoHost) {
+          query.accessPolicy = { $in: ["PARTICIPANTS", "PUBLIC"] }
+        }
+        recordings = await MeetingRecording.find(query).sort({ createdAt: -1 }).lean()
+      } catch (err) {
+        logger.warn("[Recording] Failed to query Mongo recordings:", err.message)
+      }
     }
 
-    if (!isHostOrCoHost) {
-      query.accessPolicy = { $in: ["PARTICIPANTS", "PUBLIC"] }
-    }
+    // Merge in-memory recordings for this room
+    const memoryRecs = Array.from(inMemoryRecordings.values()).filter(
+      (r) =>
+        r.roomId === roomId &&
+        r.status !== "DELETED" &&
+        (isHostOrCoHost || ["PARTICIPANTS", "PUBLIC"].includes(r.accessPolicy))
+    )
 
-    const recordings = await MeetingRecording.find(query).sort({ createdAt: -1 })
+    const seenIds = new Set(recordings.map((r) => String(r._id)))
+    for (const memRec of memoryRecs) {
+      if (!seenIds.has(String(memRec._id))) {
+        recordings.push(memRec)
+      }
+    }
 
     const formatted = recordings.map((rec) => ({
       id: rec._id,
@@ -283,7 +331,10 @@ export const getMeetingRecordings = async (req, res) => {
 export const getRecordingMetadata = async (req, res) => {
   try {
     const { recordingId } = req.params
-    const recording = await MeetingRecording.findById(recordingId)
+    let recording = inMemoryRecordings.get(recordingId)
+    if (!recording && isDbReady() && mongoose.Types.ObjectId.isValid(recordingId)) {
+      recording = await MeetingRecording.findById(recordingId).catch(() => null)
+    }
 
     if (!recording || recording.status === "DELETED") {
       throw ApiError.notFound("RECORDING_NOT_FOUND", "Recording not found")
@@ -322,13 +373,24 @@ export const getRecordingAccess = async (req, res) => {
       throw ApiError.unauthorized("AUTHENTICATION_REQUIRED", "Authentication required to access recordings")
     }
 
-    const recording = await MeetingRecording.findById(recordingId)
+    let recording = inMemoryRecordings.get(recordingId)
+    if (!recording && isDbReady() && mongoose.Types.ObjectId.isValid(recordingId)) {
+      recording = await MeetingRecording.findById(recordingId).catch(() => null)
+    }
+
     if (!recording || recording.status === "DELETED") {
       throw ApiError.notFound("RECORDING_NOT_FOUND", "Recording not found")
     }
 
     // Check meeting authorization
-    const meeting = await Meeting.findById(recording.meetingId)
+    let meeting = null
+    if (recording.roomId) {
+      meeting = await meetingStore.findMeeting(recording.roomId)
+    }
+    if (!meeting && isDbReady() && recording.meetingId && mongoose.Types.ObjectId.isValid(recording.meetingId)) {
+      meeting = await Meeting.findById(recording.meetingId).catch(() => null)
+    }
+
     const isOwner = String(recording.createdBy) === String(req.user.id)
     const isMeetingHost = meeting && String(meeting.hostId) === String(req.user.id)
 
@@ -371,7 +433,11 @@ export const streamRecording = async (req, res) => {
     const { recordingId } = req.params
     const { token } = req.query
 
-    const recording = await MeetingRecording.findById(recordingId)
+    let recording = inMemoryRecordings.get(recordingId)
+    if (!recording && isDbReady() && mongoose.Types.ObjectId.isValid(recordingId)) {
+      recording = await MeetingRecording.findById(recordingId).catch(() => null)
+    }
+
     if (!recording || recording.status === "DELETED") {
       throw ApiError.notFound("RECORDING_NOT_FOUND", "Recording not found")
     }
@@ -400,7 +466,9 @@ export const streamRecording = async (req, res) => {
     })
 
     recording.playbackCount = (recording.playbackCount || 0) + 1
-    recording.save().catch(() => {})
+    if (typeof recording.save === "function") {
+      recording.save().catch(() => {})
+    }
 
     return recordingStorageService.streamFile(req, res, recording.storagePath, recording.mimeType)
   } catch (err) {
@@ -418,7 +486,11 @@ export const downloadRecording = async (req, res) => {
     const { recordingId } = req.params
     const { token } = req.query
 
-    const recording = await MeetingRecording.findById(recordingId)
+    let recording = inMemoryRecordings.get(recordingId)
+    if (!recording && isDbReady() && mongoose.Types.ObjectId.isValid(recordingId)) {
+      recording = await MeetingRecording.findById(recordingId).catch(() => null)
+    }
+
     if (!recording || recording.status === "DELETED") {
       throw ApiError.notFound("RECORDING_NOT_FOUND", "Recording not found")
     }
@@ -446,7 +518,9 @@ export const downloadRecording = async (req, res) => {
     })
 
     recording.downloadCount = (recording.downloadCount || 0) + 1
-    recording.save().catch(() => {})
+    if (typeof recording.save === "function") {
+      recording.save().catch(() => {})
+    }
 
     return recordingStorageService.downloadFile(
       res,
@@ -470,13 +544,23 @@ export const deleteRecording = async (req, res) => {
       throw ApiError.unauthorized("AUTHENTICATION_REQUIRED", "Sign in required to delete recordings")
     }
 
-    const recording = await MeetingRecording.findById(recordingId)
+    let recording = inMemoryRecordings.get(recordingId)
+    if (!recording && isDbReady() && mongoose.Types.ObjectId.isValid(recordingId)) {
+      recording = await MeetingRecording.findById(recordingId).catch(() => null)
+    }
+
     if (!recording) {
       throw ApiError.notFound("RECORDING_NOT_FOUND", "Recording not found")
     }
 
     const isOwner = String(recording.createdBy) === String(req.user.id)
-    const meeting = await Meeting.findById(recording.meetingId)
+    let meeting = null
+    if (recording.roomId) {
+      meeting = await meetingStore.findMeeting(recording.roomId)
+    }
+    if (!meeting && isDbReady() && recording.meetingId && mongoose.Types.ObjectId.isValid(recording.meetingId)) {
+      meeting = await Meeting.findById(recording.meetingId).catch(() => null)
+    }
     const isMeetingHost = meeting && String(meeting.hostId) === String(req.user.id)
 
     if (!isOwner && !isMeetingHost) {
@@ -486,9 +570,12 @@ export const deleteRecording = async (req, res) => {
     // Delete physical file
     await recordingStorageService.deleteFile(recording.storagePath)
 
-    // Mark deleted in DB
+    // Mark deleted in memory and DB
     recording.status = "DELETED"
-    await recording.save()
+    inMemoryRecordings.delete(recordingId)
+    if (typeof recording.save === "function") {
+      await recording.save().catch(() => {})
+    }
 
     logger.info(MeetingEvents.RECORDING_DELETED, {
       recordingId: recording._id,
@@ -505,3 +592,4 @@ export const deleteRecording = async (req, res) => {
     return sendError(res, err)
   }
 }
+
