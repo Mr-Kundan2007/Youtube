@@ -1,0 +1,51 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "description": "YouTube Clone Backend",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "serve": "node index.js",
+    "test": "node tests/phase12_production.test.js",
+    "test:theme": "node tests/phase2_theme_system.test.js",
+    "test:theme:persistence": "node tests/phase3_persistent_theme.test.js",
+    "test:device": "node tests/phase4_device_detection.test.js",
+    "test:location": "node tests/phase5_ip_location.test.js",
+    "test:detection": "node tests/phase6_new_login_detection.test.js",
+    "test:otp": "node tests/phase7_otp_verification.test.js",
+    "test:trusted": "node tests/phase8_trusted_device_history.test.js",
+    "test:session": "node tests/phase9_active_sessions.test.js",
+    "test:alerts": "node tests/phase10_security_alerts.test.js",
+    "test:player": "node tests/phase9_next_video_player_manager.test.js",
+    "test:player:all": "node tests/phase1_custom_videoplayer.test.js && node tests/phase2_custom_playback_timeline.test.js && node tests/phase3_volume_playback_speed.test.js && node tests/phase4_advanced_seeking_time.test.js && node tests/phase5_viewing_modes.test.js && node tests/phase6_subtitles_quality.test.js && node tests/phase7_buffering_autohide.test.js && node tests/phase8_watch_progress.test.js && node tests/phase9_next_video_player_manager.test.js",
+    "test:download": "node tests/download_system.test.js",
+    "test:all": "node tests/download_system.test.js && node tests/phase12_production.test.js && node tests/phase11_accessibility.test.js && node tests/phase10_security.test.js && node tests/recording.test.js && node tests/security.test.js",
+    "test:phase11": "node tests/phase11_master_runner.js",
+    "test:e2e": "node tests/phase12_subscription_system_e2e.test.js",
+    "test:all:phases": "npm run test:phase11 && npm run test:e2e",
+    "check:readiness": "node scripts/preDeploymentCheck.js",
+    "report:readiness": "node scripts/generateReadinessReport.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-fileupload": "^1.5.1",
+    "jsonwebtoken": "^9.0.2",
+    "livekit-server-sdk": "^2.18.0",
+    "mongoose": "^8.9.5",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^10.0.10",
+    "pdfkit": "^0.20.2",
+    "razorpay": "^2.9.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}

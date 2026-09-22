@@ -1,0 +1,112 @@
+name: Production CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  lint-and-typecheck:
+    name: Frontend Typecheck & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Frontend Dependencies
+        run: npm ci
+
+      - name: TypeScript Typecheck
+        run: npx tsc --noEmit
+
+      - name: Production Next.js Build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+          NODE_ENV: production
+        run: npm run build
+
+  backend-tests:
+    name: Backend Hardening & Regression Tests
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Server Dependencies
+        working-directory: ./server
+        run: npm ci
+
+      - name: Run Master Phase 12 Production Test Suite
+        working-directory: ./server
+        env:
+          NODE_ENV: test
+          DB_URL: mongodb://127.0.0.1:27017/youtube_test
+          JWT_SECRET: test_ci_jwt_secret_at_least_32_characters_long_123456
+          LIVEKIT_API_KEY: devkey
+          LIVEKIT_API_SECRET: secret
+        run: npm test
+
+      - name: Run Complete Regression Suite (Phases 8-12)
+        working-directory: ./server
+        env:
+          NODE_ENV: test
+          DB_URL: mongodb://127.0.0.1:27017/youtube_test
+          JWT_SECRET: test_ci_jwt_secret_at_least_32_characters_long_123456
+          LIVEKIT_API_KEY: devkey
+          LIVEKIT_API_SECRET: secret
+        run: npm run test:all
+
+      - name: Run Phase 11 Master Subscription Test Suite
+        working-directory: ./server
+        env:
+          NODE_ENV: test
+          DB_URL: mongodb://127.0.0.1:27017/youtube_test
+          JWT_SECRET: test_ci_jwt_secret_at_least_32_characters_long_123456
+          RAZORPAY_KEY_ID: rzp_test_mockkey12345678
+          RAZORPAY_KEY_SECRET: mock_razorpay_secret_key_87654321
+          RAZORPAY_WEBHOOK_SECRET: mock_webhook_secret_key_123456
+        run: node tests/phase11_master_runner.js
+
+      - name: Run Pre-Deployment Readiness Check
+        working-directory: ./server
+        env:
+          NODE_ENV: test
+          DB_URL: mongodb://127.0.0.1:27017/youtube_test
+          JWT_SECRET: test_ci_jwt_secret_at_least_32_characters_long_123456
+          RAZORPAY_KEY_ID: rzp_test_mockkey12345678
+          RAZORPAY_KEY_SECRET: mock_razorpay_secret_key_87654321
+          RAZORPAY_WEBHOOK_SECRET: mock_webhook_secret_key_123456
+        run: node scripts/preDeploymentCheck.js
+
+  docker-lint:
+    name: Validate Docker & Compose Config
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose Configuration
+        run: docker compose config
