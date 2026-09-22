@@ -181,25 +181,395 @@ export interface ApiResponse<T> {
   }
 }
 
-const getAuthHeaders = (): HeadersInit => {
-  if (typeof window === "undefined") return { "Content-Type": "application/json" }
-  const token = localStorage.getItem("token") || ""
-  return {
-    "Content-Type": "application/json",
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+const API_BASE_URL =
+  process.env.NEXT_PUBLIC_SERVER_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:5001"
+
+const resolveUrl = (path: string): string => {
+  if (path.startsWith("http://") || path.startsWith("https://")) return path
+  if (typeof window !== "undefined" && API_BASE_URL && API_BASE_URL.startsWith("http")) {
+    return `${API_BASE_URL.replace(/\/$/, "")}/${path.replace(/^\//, "")}`
   }
+  return path
+}
+
+const safeFetchJson = async <T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> => {
+  const url = resolveUrl(path)
+  let res: Response
+  try {
+    res = await fetch(url, options)
+  } catch (netErr: any) {
+    if (url !== path) {
+      try {
+        res = await fetch(path, options)
+      } catch {
+        throw new Error(netErr.message || "Network request failed")
+      }
+    } else {
+      throw new Error(netErr.message || "Network request failed")
+    }
+  }
+
+  const contentType = res.headers.get("content-type") || ""
+  if (!contentType.includes("application/json")) {
+    const text = await res.text().catch(() => "")
+    const cleanText = text.replace(/<[^>]*>?/gm, " ").replace(/\s+/g, " ").trim().slice(0, 100)
+    throw new Error(cleanText || `Server returned non-JSON response (${res.status})`)
+  }
+
+  return res.json()
+}
+
+export const DEFAULT_STATIC_PLANS: SubscriptionPlan[] = [
+  {
+    _id: "static-plan-free",
+    id: "static-plan-free",
+    name: "Free",
+    slug: "free",
+    description: "Basic streaming and learning access with 1 daily download",
+    price: 0,
+    currency: "INR",
+    isActive: true,
+    isPopular: false,
+    displayOrder: 1,
+    validityType: "lifetime",
+    validityDays: null,
+    rank: 1,
+    features: {
+      premiumVideoAccess: false,
+      premiumCourses: false,
+      priorityContent: false,
+      adFree: false,
+      offlineDownloads: false,
+      fastStreaming: false,
+      exclusiveContent: false,
+    },
+    limits: {
+      streamingQuality: "720p",
+      dailyWatchTime: 120,
+      dailyUsageLimit: 1000,
+      dailyDownloadLimit: 1,
+      maxDownloadQuality: "720p",
+      maxDevices: 1,
+      maxConcurrentStreams: 1,
+    },
+    billingCycles: {
+      monthly: {
+        cycle: "monthly",
+        price: 0,
+        baseTotal: 0,
+        monthlyEquivalent: 0,
+        discountPercent: 0,
+        savings: 0,
+        durationMonths: 1,
+        durationDays: null,
+        savingsText: null,
+      },
+      quarterly: {
+        cycle: "quarterly",
+        price: 0,
+        baseTotal: 0,
+        monthlyEquivalent: 0,
+        discountPercent: 0,
+        savings: 0,
+        durationMonths: 3,
+        durationDays: null,
+        savingsText: null,
+      },
+      yearly: {
+        cycle: "yearly",
+        price: 0,
+        baseTotal: 0,
+        monthlyEquivalent: 0,
+        discountPercent: 0,
+        savings: 0,
+        durationMonths: 12,
+        durationDays: null,
+        savingsText: null,
+      },
+    },
+    summaryBenefits: [
+      "Standard public video access",
+      "Standard 720p HD streaming",
+      "1 daily offline video download",
+      "Single active device stream",
+    ],
+  },
+  {
+    _id: "static-plan-bronze",
+    id: "static-plan-bronze",
+    name: "Bronze",
+    slug: "bronze",
+    description: "Enhanced HD streaming with 5 downloads/day and standard ad experience",
+    price: 199,
+    currency: "INR",
+    isActive: true,
+    isPopular: false,
+    displayOrder: 2,
+    validityType: "monthly",
+    validityDays: 30,
+    rank: 2,
+    features: {
+      premiumVideoAccess: true,
+      premiumCourses: false,
+      priorityContent: false,
+      adFree: false,
+      offlineDownloads: true,
+      fastStreaming: false,
+      exclusiveContent: false,
+    },
+    limits: {
+      streamingQuality: "1080p",
+      dailyWatchTime: null,
+      dailyUsageLimit: null,
+      dailyDownloadLimit: 5,
+      maxDownloadQuality: "1080p",
+      maxDevices: 2,
+      maxConcurrentStreams: 2,
+    },
+    billingCycles: {
+      monthly: {
+        cycle: "monthly",
+        price: 199,
+        baseTotal: 199,
+        monthlyEquivalent: 199,
+        discountPercent: 0,
+        savings: 0,
+        durationMonths: 1,
+        durationDays: 30,
+        savingsText: null,
+      },
+      quarterly: {
+        cycle: "quarterly",
+        price: 537,
+        baseTotal: 597,
+        monthlyEquivalent: 179,
+        discountPercent: 10,
+        savings: 60,
+        durationMonths: 3,
+        durationDays: 90,
+        savingsText: "Save 10%",
+      },
+      yearly: {
+        cycle: "yearly",
+        price: 1910,
+        baseTotal: 2388,
+        monthlyEquivalent: 159,
+        discountPercent: 20,
+        savings: 478,
+        durationMonths: 12,
+        durationDays: 365,
+        savingsText: "Save 20%",
+      },
+    },
+    summaryBenefits: [
+      "Premium video library access",
+      "Crisp 1080p Full HD streaming",
+      "5 daily offline video downloads",
+      "2 registered devices",
+    ],
+  },
+  {
+    _id: "static-plan-silver",
+    id: "static-plan-silver",
+    name: "Silver",
+    slug: "silver",
+    description: "Full HD 2K streaming, Ad-free playback, premium courses and 15 downloads/day",
+    price: 499,
+    currency: "INR",
+    isActive: true,
+    isPopular: true,
+    displayOrder: 3,
+    validityType: "monthly",
+    validityDays: 30,
+    rank: 3,
+    features: {
+      premiumVideoAccess: true,
+      premiumCourses: true,
+      priorityContent: true,
+      adFree: true,
+      offlineDownloads: true,
+      fastStreaming: true,
+      exclusiveContent: false,
+    },
+    limits: {
+      streamingQuality: "1440p",
+      dailyWatchTime: null,
+      dailyUsageLimit: null,
+      dailyDownloadLimit: 15,
+      maxDownloadQuality: "1080p",
+      maxDevices: 5,
+      maxConcurrentStreams: 3,
+    },
+    billingCycles: {
+      monthly: {
+        cycle: "monthly",
+        price: 499,
+        baseTotal: 499,
+        monthlyEquivalent: 499,
+        discountPercent: 0,
+        savings: 0,
+        durationMonths: 1,
+        durationDays: 30,
+        savingsText: null,
+      },
+      quarterly: {
+        cycle: "quarterly",
+        price: 1347,
+        baseTotal: 1497,
+        monthlyEquivalent: 449,
+        discountPercent: 10,
+        savings: 150,
+        durationMonths: 3,
+        durationDays: 90,
+        savingsText: "Save 10%",
+      },
+      yearly: {
+        cycle: "yearly",
+        price: 4790,
+        baseTotal: 5988,
+        monthlyEquivalent: 399,
+        discountPercent: 20,
+        savings: 1198,
+        durationMonths: 12,
+        durationDays: 365,
+        savingsText: "Save 20%",
+      },
+    },
+    summaryBenefits: [
+      "Full premium video & course catalog",
+      "Ad-Free uninterrupted viewing",
+      "2K 1440p Quad HD streaming",
+      "15 daily offline video downloads",
+      "Priority fast streaming servers",
+    ],
+  },
+  {
+    _id: "static-plan-gold",
+    id: "static-plan-gold",
+    name: "Gold",
+    slug: "gold",
+    description: "Ultra HD 4K HDR, VIP ad-free streaming, exclusive content, 50 downloads/day",
+    price: 999,
+    currency: "INR",
+    isActive: true,
+    isPopular: false,
+    displayOrder: 4,
+    validityType: "monthly",
+    validityDays: 30,
+    rank: 4,
+    features: {
+      premiumVideoAccess: true,
+      premiumCourses: true,
+      priorityContent: true,
+      adFree: true,
+      offlineDownloads: true,
+      fastStreaming: true,
+      exclusiveContent: true,
+    },
+    limits: {
+      streamingQuality: "4k",
+      dailyWatchTime: null,
+      dailyUsageLimit: null,
+      dailyDownloadLimit: 50,
+      maxDownloadQuality: "4k",
+      maxDevices: 10,
+      maxConcurrentStreams: 5,
+    },
+    billingCycles: {
+      monthly: {
+        cycle: "monthly",
+        price: 999,
+        baseTotal: 999,
+        monthlyEquivalent: 999,
+        discountPercent: 0,
+        savings: 0,
+        durationMonths: 1,
+        durationDays: 30,
+        savingsText: null,
+      },
+      quarterly: {
+        cycle: "quarterly",
+        price: 2697,
+        baseTotal: 2997,
+        monthlyEquivalent: 899,
+        discountPercent: 10,
+        savings: 300,
+        durationMonths: 3,
+        durationDays: 90,
+        savingsText: "Save 10%",
+      },
+      yearly: {
+        cycle: "yearly",
+        price: 9590,
+        baseTotal: 11988,
+        monthlyEquivalent: 799,
+        discountPercent: 20,
+        savings: 2398,
+        durationMonths: 12,
+        durationDays: 365,
+        savingsText: "Save 20%",
+      },
+    },
+    summaryBenefits: [
+      "All-Access VIP pass & exclusive masterclasses",
+      "Cinematic 4K Ultra HD HDR streaming",
+      "50 daily offline video downloads",
+      "Ad-Free across 5 concurrent screens",
+      "Dedicated VIP priority customer support",
+    ],
+  },
+]
+
+const DEFAULT_BILLING_CYCLES: Record<BillingCycleKey, BillingCycleConfig> = {
+  monthly: {
+    key: "monthly",
+    label: "Monthly",
+    durationMonths: 1,
+    durationDays: 30,
+    discountPercent: 0,
+    badge: null,
+    savingsText: null,
+  },
+  quarterly: {
+    key: "quarterly",
+    label: "Quarterly",
+    durationMonths: 3,
+    durationDays: 90,
+    discountPercent: 10,
+    badge: "Save 10%",
+    savingsText: "Save 10%",
+  },
+  yearly: {
+    key: "yearly",
+    label: "Yearly",
+    durationMonths: 12,
+    durationDays: 365,
+    discountPercent: 20,
+    badge: "Save 20%",
+    savingsText: "Save 20%",
+  },
 }
 
 /**
  * Fetches all active subscription plans along with supported billing cycles.
  */
 export const getSubscriptionPlansAndCycles = async (): Promise<GetPlansResponse> => {
-  const res = await fetch("/api/subscriptions/plans")
-  const json: ApiResponse<GetPlansResponse> = await res.json()
-  if (!json.success || !json.data?.plans) {
-    throw new Error(json.error?.message || json.message || "Failed to fetch subscription plans")
+  try {
+    const json = await safeFetchJson<GetPlansResponse>("/api/subscriptions/plans")
+    if (json.success && json.data?.plans?.length) {
+      return json.data
+    }
+  } catch (err) {
+    console.warn("[SubscriptionService] Live plans fetch failed, using fallback plans:", err)
   }
-  return json.data
+
+  // Graceful fallback to static plans configuration
+  return {
+    plans: DEFAULT_STATIC_PLANS,
+    billingCycles: DEFAULT_BILLING_CYCLES,
+  }
 }
 
 /**
@@ -210,27 +580,36 @@ export const getSubscriptionPlans = async (): Promise<SubscriptionPlan[]> => {
   return data.plans
 }
 
-
 /**
  * Fetches specific subscription plan details by ID or slug.
  */
 export const getPlanDetails = async (planId: string): Promise<SubscriptionPlan> => {
-  const res = await fetch(`/api/subscriptions/plans/${encodeURIComponent(planId)}`)
-  const json: ApiResponse<{ plan: SubscriptionPlan }> = await res.json()
-  if (!json.success || !json.data?.plan) {
-    throw new Error(json.error?.message || json.message || "Failed to fetch plan details")
+  try {
+    const json = await safeFetchJson<{ plan: SubscriptionPlan }>(
+      `/api/subscriptions/plans/${encodeURIComponent(planId)}`
+    )
+    if (json.success && json.data?.plan) {
+      return json.data.plan
+    }
+  } catch (err) {
+    console.warn(`[SubscriptionService] Live plan detail fetch failed for ${planId}:`, err)
   }
-  return json.data.plan
+
+  const fallback = DEFAULT_STATIC_PLANS.find(
+    (p) => p.slug.toLowerCase() === planId.toLowerCase() || p._id === planId || p.id === planId
+  )
+  if (fallback) return fallback
+
+  throw new Error("Subscription plan not found")
 }
 
 /**
  * Fetches the authenticated user's current subscription details, status, features, and limits.
  */
 export const getCurrentSubscription = async (): Promise<CurrentSubscriptionDetails> => {
-  const res = await fetch("/api/subscriptions/current", {
+  const json = await safeFetchJson<CurrentSubscriptionDetails>("/api/subscriptions/current", {
     headers: getAuthHeaders(),
   })
-  const json: ApiResponse<CurrentSubscriptionDetails> = await res.json()
   if (!json.success || !json.data) {
     throw new Error(json.error?.message || json.message || "Failed to fetch current subscription")
   }
@@ -241,10 +620,9 @@ export const getCurrentSubscription = async (): Promise<CurrentSubscriptionDetai
  * Fetches the authenticated user's chronological subscription lifecycle history.
  */
 export const getSubscriptionHistory = async (): Promise<SubscriptionHistoryItem[]> => {
-  const res = await fetch("/api/subscriptions/history", {
+  const json = await safeFetchJson<{ history: SubscriptionHistoryItem[] }>("/api/subscriptions/history", {
     headers: getAuthHeaders(),
   })
-  const json: ApiResponse<{ history: SubscriptionHistoryItem[] }> = await res.json()
   if (!json.success || !json.data?.history) {
     throw new Error(json.error?.message || json.message || "Failed to fetch subscription history")
   }
@@ -255,10 +633,9 @@ export const getSubscriptionHistory = async (): Promise<SubscriptionHistoryItem[
  * Fetches resolved feature permissions and capability flags for the current user.
  */
 export const getAvailableFeatures = async (): Promise<FeaturePermissionsResponse> => {
-  const res = await fetch("/api/subscriptions/features", {
+  const json = await safeFetchJson<FeaturePermissionsResponse>("/api/subscriptions/features", {
     headers: getAuthHeaders(),
   })
-  const json: ApiResponse<FeaturePermissionsResponse> = await res.json()
   if (!json.success || !json.data) {
     throw new Error(json.error?.message || json.message || "Failed to fetch feature permissions")
   }
@@ -279,10 +656,9 @@ export interface SubscriptionUsageData {
  * Fetches the authenticated user's current daily usage metrics and allowances.
  */
 export const getSubscriptionUsage = async (): Promise<SubscriptionUsageData> => {
-  const res = await fetch("/api/subscriptions/usage", {
+  const json = await safeFetchJson<SubscriptionUsageData>("/api/subscriptions/usage", {
     headers: getAuthHeaders(),
   })
-  const json: ApiResponse<SubscriptionUsageData> = await res.json()
   if (!json.success || !json.data) {
     throw new Error(json.error?.message || json.message || "Failed to fetch subscription usage")
   }
@@ -305,12 +681,11 @@ export interface AppNotification {
  * Schedules cancellation of the user's active paid subscription.
  */
 export const cancelSubscription = async (reason?: string): Promise<{ success: boolean; message: string; cancelEffectiveAt: string }> => {
-  const res = await fetch("/api/subscriptions/cancel", {
+  const json = await safeFetchJson<{ success: boolean; message: string; cancelEffectiveAt: string }>("/api/subscriptions/cancel", {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify({ reason }),
   })
-  const json = await res.json()
   if (!json.success) {
     throw new Error(json.error?.message || json.message || "Failed to cancel subscription")
   }
@@ -321,11 +696,10 @@ export const cancelSubscription = async (reason?: string): Promise<{ success: bo
  * Reverses a scheduled subscription cancellation before it reaches expiry.
  */
 export const restoreCancellation = async (): Promise<{ success: boolean; message: string }> => {
-  const res = await fetch("/api/subscriptions/restore-cancellation", {
+  const json = await safeFetchJson<{ success: boolean; message: string }>("/api/subscriptions/restore-cancellation", {
     method: "POST",
     headers: getAuthHeaders(),
   })
-  const json = await res.json()
   if (!json.success) {
     throw new Error(json.error?.message || json.message || "Failed to restore subscription")
   }
@@ -336,38 +710,47 @@ export const restoreCancellation = async (): Promise<{ success: boolean; message
  * Fetches user notifications.
  */
 export const getUserNotifications = async (): Promise<AppNotification[]> => {
-  const res = await fetch("/api/notifications", {
-    headers: getAuthHeaders(),
-  })
-  const json = await res.json()
-  if (!json.success || !json.data) {
+  try {
+    const json = await safeFetchJson<any>("/api/notifications", {
+      headers: getAuthHeaders(),
+    })
+    if (!json.success || !json.data) {
+      return []
+    }
+    return Array.isArray(json.data) ? json.data : json.data.notifications || []
+  } catch {
     return []
   }
-  return Array.isArray(json.data) ? json.data : json.data.notifications || []
 }
 
 /**
  * Marks a single notification as read.
  */
 export const markNotificationRead = async (id: string): Promise<boolean> => {
-  const res = await fetch(`/api/notifications/${encodeURIComponent(id)}/read`, {
-    method: "PATCH",
-    headers: getAuthHeaders(),
-  })
-  const json = await res.json()
-  return Boolean(json.success)
+  try {
+    const json = await safeFetchJson<any>(`/api/notifications/${encodeURIComponent(id)}/read`, {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+    })
+    return Boolean(json.success)
+  } catch {
+    return false
+  }
 }
 
 /**
  * Marks all notifications as read.
  */
 export const markAllNotificationsRead = async (): Promise<boolean> => {
-  const res = await fetch("/api/notifications/read-all", {
-    method: "PATCH",
-    headers: getAuthHeaders(),
-  })
-  const json = await res.json()
-  return Boolean(json.success)
+  try {
+    const json = await safeFetchJson<any>("/api/notifications/read-all", {
+      method: "PATCH",
+      headers: getAuthHeaders(),
+    })
+    return Boolean(json.success)
+  } catch {
+    return false
+  }
 }
 
 export interface PlanChangeResponse {
@@ -383,12 +766,11 @@ export interface PlanChangeResponse {
  * Requests a plan change (such as scheduling a downgrade to Free or another plan).
  */
 export const changeSubscriptionPlan = async (targetPlanKey: string): Promise<PlanChangeResponse> => {
-  const res = await fetch("/api/subscriptions/change-plan", {
+  const json = await safeFetchJson<PlanChangeResponse>("/api/subscriptions/change-plan", {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify({ targetPlanKey, plan: targetPlanKey }),
   })
-  const json = await res.json()
   if (!json.success) {
     throw new Error(json.error?.message || json.message || "Failed to change subscription plan")
   }
