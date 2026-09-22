@@ -194,6 +194,24 @@ const resolveUrl = (path: string): string => {
   return path
 }
 
+const getAuthHeaders = (): HeadersInit => {
+  if (typeof window === "undefined") return { "Content-Type": "application/json" }
+  let token = localStorage.getItem("token") || ""
+  if (!token) {
+    const localProfile = localStorage.getItem("Profile") || localStorage.getItem("profile")
+    if (localProfile) {
+      try {
+        const parsed = JSON.parse(localProfile)
+        if (parsed?.token) token = parsed.token
+      } catch {}
+    }
+  }
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+}
+
 const safeFetchJson = async <T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> => {
   const url = resolveUrl(path)
   let res: Response
