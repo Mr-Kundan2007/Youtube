@@ -21,5 +21,5 @@ const auth = getAuth(app)
 const provider = new GoogleAuthProvider()
 provider.setCustomParameters({ prompt: "select_account" })
 
-export { auth, provider, signInWithPopup, signOut }
+export { auth, provider, GoogleAuthProvider, signInWithPopup, signOut }
 export default app

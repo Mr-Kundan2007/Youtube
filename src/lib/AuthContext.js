@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react"
-import { auth, provider, signInWithPopup, signOut } from "./firebase"
+import { auth, provider, GoogleAuthProvider, signInWithPopup, signOut } from "./firebase"
 import API from "./axiosinstance"
 import { useTheme } from "@/context/ThemeContext"
 import { getDeviceInfo } from "@/utils/deviceUtils"
@@ -225,39 +225,24 @@ export const AuthProvider = ({ children }) => {
     }
   }, [])
 
-  // Google Login via Firebase Popup and Backend sync
+  // Google Login via Firebase Popup with account selection and Backend sync
   const loginWithGoogle = async () => {
     try {
-      let userData = null
-      let userToken = null
+      // Force Google Account Chooser screen ("select_account") every time
+      const googleProvider = new GoogleAuthProvider()
+      googleProvider.setCustomParameters({
+        prompt: "select_account",
+      })
 
-      const isPlaceholder =
-        !process.env.NEXT_PUBLIC_FIREBASE_API_KEY ||
-        process.env.NEXT_PUBLIC_FIREBASE_API_KEY.includes("Dummy")
+      const result = await signInWithPopup(auth, googleProvider)
+      const user = result.user
 
-      if (!isPlaceholder) {
-        try {
-          const result = await signInWithPopup(auth, provider)
-          const user = result.user
-          userData = {
-            name: user.displayName || "YouTube User",
-            email: user.email,
-            image: user.photoURL || "",
-          }
-          userToken = await user.getIdToken()
-        } catch (firebaseErr) {
-          console.warn("Firebase Auth error, falling back gracefully:", firebaseErr)
-          throw firebaseErr
-        }
+      const userData = {
+        name: user.displayName || user.email?.split("@")[0] || "Google User",
+        email: user.email,
+        image: user.photoURL || "",
       }
-
-      if (!userData) {
-        userData = {
-          name: "Kundan",
-          email: "kundank82522@gmail.com",
-          image: "https://lh3.googleusercontent.com/a/ACg8ocILrCpHWXnrn2nmIx4B-TQGO2lD6aomlvwdHqEh82FvoIwJZec=s96-c",
-        }
-      }
+      const userToken = await user.getIdToken()
 
       let deviceInfo = null
       try {
@@ -293,13 +278,13 @@ export const AuthProvider = ({ children }) => {
         setIsAuthModalOpen(false)
         return data
       } catch (backendError) {
-        console.warn("Backend login failed, using local profile:", backendError)
+        console.warn("Backend login failed, using authenticated Google profile:", backendError)
         const fallbackUser = {
-          _id: "6a9a9e1cdcecd22c98527df8",
+          _id: user.uid || "google-user-id",
           name: userData.name,
           channelname: userData.name,
-          description: "I will post daily life vlogs here ",
-          desc: "I will post daily life vlogs here ",
+          description: "Welcome to my YouTube channel!",
+          desc: "Welcome to my YouTube channel!",
           email: userData.email,
           image: userData.image,
           joinedon: new Date().toISOString(),
