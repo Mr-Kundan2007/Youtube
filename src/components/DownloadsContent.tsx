@@ -128,7 +128,7 @@ interface PreferenceData {
 
 export default function DownloadsContent() {
   const router = useRouter()
-  const { user, loginWithGoogle }: any = useAuth()
+  const { user, openAuthModal }: any = useAuth()
 
   // Navigation tabs
   const [activeTab, setActiveTab] = useState<
@@ -514,7 +514,7 @@ export default function DownloadsContent() {
           Sign in to check your download quota, view offline history, configure devices, and manage self-service support.
         </p>
         <Button
-          onClick={loginWithGoogle}
+          onClick={openAuthModal}
           className="bg-neutral-900 hover:bg-neutral-800 text-white rounded-full px-6 py-2.5 font-medium cursor-pointer"
         >
           Sign In

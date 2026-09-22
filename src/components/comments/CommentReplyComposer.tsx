@@ -30,7 +30,7 @@ export const CommentReplyComposer: React.FC<CommentReplyComposerProps> = ({
   onCancel,
   autoFocus = true,
 }) => {
-  const { user, loginWithGoogle }: any = useAuth()
+  const { user, openAuthModal }: any = useAuth()
   const [text, setText] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
@@ -194,7 +194,7 @@ export const CommentReplyComposer: React.FC<CommentReplyComposerProps> = ({
           <Button
             type="button"
             size="sm"
-            onClick={loginWithGoogle}
+            onClick={openAuthModal}
             className="h-7 px-3 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center gap-1 shadow-xs cursor-pointer"
           >
             <LogIn className="h-3 w-3" />

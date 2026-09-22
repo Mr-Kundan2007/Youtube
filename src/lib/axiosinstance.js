@@ -1,19 +1,37 @@
 import axios from "axios"
 
+const getBaseURL = () => {
+  const envUrl = process.env.NEXT_PUBLIC_SERVER_URL || process.env.NEXT_PUBLIC_API_URL
+  if (envUrl) return envUrl
+  if (typeof window !== "undefined") {
+    if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+      return ""
+    }
+  }
+  return "http://localhost:5001"
+}
+
 const API = axios.create({
-  baseURL:
-    process.env.NEXT_PUBLIC_SERVER_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:5001",
+  baseURL: getBaseURL(),
 })
 
 API.interceptors.request.use((req) => {
   if (typeof window !== "undefined") {
+    // If running in production on Vercel without external server, use relative API routes
+    if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+      if (!process.env.NEXT_PUBLIC_SERVER_URL || process.env.NEXT_PUBLIC_SERVER_URL.includes("localhost")) {
+        req.baseURL = ""
+        if (req.url && !req.url.startsWith("/api") && !req.url.startsWith("http")) {
+          req.url = `/api${req.url.startsWith("/") ? req.url : "/" + req.url}`
+        }
+      }
+    }
+
     const token = localStorage.getItem("token")
     if (token) {
       req.headers.Authorization = `Bearer ${token}`
     } else {
-      const profile = localStorage.getItem("Profile")
+      const profile = localStorage.getItem("Profile") || localStorage.getItem("profile")
       if (profile) {
         try {
           const parsed = JSON.parse(profile)
@@ -26,6 +44,7 @@ API.interceptors.request.use((req) => {
   }
   return req;
 });
+
 
 API.interceptors.response.use(
   (response) => response,

@@ -11,9 +11,14 @@ const initialAuthContext = {
   token: null,
   loading: false,
   pendingLogin: null,
+  isAuthModalOpen: false,
+  openAuthModal: () => {},
+  closeAuthModal: () => {},
   clearPendingLogin: () => {},
   login: () => {},
   loginWithGoogle: async () => {},
+  loginWithDemo: async () => {},
+  loginWithCredentials: async () => {},
   logout: async () => {},
   updateChannel: async () => {},
 }
@@ -24,6 +29,10 @@ export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [pendingLogin, setPendingLogin] = useState(null)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+
+  const openAuthModal = () => setIsAuthModalOpen(true)
+  const closeAuthModal = () => setIsAuthModalOpen(false)
 
   const clearPendingLogin = () => {
     setPendingLogin(null)
@@ -238,6 +247,7 @@ export const AuthProvider = ({ children }) => {
           userToken = await user.getIdToken()
         } catch (firebaseErr) {
           console.warn("Firebase Auth error, falling back gracefully:", firebaseErr)
+          throw firebaseErr
         }
       }
 
@@ -265,6 +275,7 @@ export const AuthProvider = ({ children }) => {
         // Unrecognized environment check (Phase 6): secondary verification required
         if (data?.status === "PENDING_VERIFICATION") {
           setPendingLogin(data)
+          setIsAuthModalOpen(false)
           return { pending: true, ...data }
         }
 
@@ -279,6 +290,7 @@ export const AuthProvider = ({ children }) => {
           token,
         })
         themeContext?.syncWithUserTheme?.(userObj)
+        setIsAuthModalOpen(false)
         return data
       } catch (backendError) {
         console.warn("Backend login failed, using local profile:", backendError)
@@ -302,11 +314,91 @@ export const AuthProvider = ({ children }) => {
           token,
         })
         themeContext?.refreshAutomaticTheme?.()
+        setIsAuthModalOpen(false)
         return { result: fallbackUser, user: fallbackUser, token }
       }
     } catch (error) {
       console.error("Sign in error:", error)
+      throw error
     }
+  }
+
+  // Direct login with email / custom credentials
+  const loginWithCredentials = async ({ name, email, image } = {}) => {
+    const userName = name || "Kundan"
+    const userEmail = email || "kundank82522@gmail.com"
+    const userImage =
+      image ||
+      "https://lh3.googleusercontent.com/a/ACg8ocILrCpHWXnrn2nmIx4B-TQGO2lD6aomlvwdHqEh82FvoIwJZec=s96-c"
+
+    let deviceInfo = null
+    try {
+      deviceInfo = await getDeviceInfo()
+    } catch (dErr) {
+      console.warn("Device info collection warning:", dErr)
+    }
+
+    try {
+      const { data } = await API.post("/user/login", {
+        name: userName,
+        email: userEmail,
+        image: userImage,
+        deviceInfo: deviceInfo || undefined,
+      })
+
+      if (data?.status === "PENDING_VERIFICATION") {
+        setPendingLogin(data)
+        setIsAuthModalOpen(false)
+        return { pending: true, ...data }
+      }
+
+      const userObj = data.result || data.user || data
+      const token = data.token || data.accessToken || "demo-token"
+
+      persistSession(userObj, token)
+      setCurrentUser({
+        ...userObj,
+        result: userObj,
+        user: userObj,
+        token,
+      })
+      themeContext?.syncWithUserTheme?.(userObj)
+      setIsAuthModalOpen(false)
+      return data
+    } catch (backendError) {
+      console.warn("Backend login failed, using direct session:", backendError)
+      const fallbackUser = {
+        _id: "6a9a9e1cdcecd22c98527df8",
+        name: userName,
+        channelname: userName,
+        description: "Welcome to my YouTube channel!",
+        desc: "Welcome to my YouTube channel!",
+        email: userEmail,
+        image: userImage,
+        joinedon: new Date().toISOString(),
+        joinedOn: new Date().toISOString(),
+      }
+      const token = "demo-token"
+      persistSession(fallbackUser, token)
+      setCurrentUser({
+        ...fallbackUser,
+        result: fallbackUser,
+        user: fallbackUser,
+        token,
+      })
+      themeContext?.refreshAutomaticTheme?.()
+      setIsAuthModalOpen(false)
+      return { result: fallbackUser, user: fallbackUser, token }
+    }
+  }
+
+  // 1-Click Instant Demo Login
+  const loginWithDemo = async () => {
+    return loginWithCredentials({
+      name: "Kundan",
+      email: "kundank82522@gmail.com",
+      image: "https://lh3.googleusercontent.com/a/ACg8ocILrCpHWXnrn2nmIx4B-TQGO2lD6aomlvwdHqEh82FvoIwJZec=s96-c",
+    })
   }
 
   // Multi-tab logout listener (Phase 9)
@@ -411,8 +503,13 @@ export const AuthProvider = ({ children }) => {
     loading,
     pendingLogin,
     clearPendingLogin,
+    isAuthModalOpen,
+    openAuthModal,
+    closeAuthModal,
     login,
     loginWithGoogle,
+    loginWithDemo,
+    loginWithCredentials,
     logout,
     updateChannel,
   }

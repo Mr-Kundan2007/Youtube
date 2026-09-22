@@ -10,6 +10,7 @@ import { AuthProvider } from "@/lib/AuthContext"
 import { ThemeProvider } from "@/context/ThemeContext"
 import { useRouter } from "next/router"
 import { VerificationPendingModal } from "@/components/auth/VerificationPendingModal"
+import { AuthModal } from "@/components/auth/AuthModal"
 
 export default function App({ Component, pageProps }: AppProps) {
   const router = useRouter()
@@ -20,6 +21,7 @@ export default function App({ Component, pageProps }: AppProps) {
     <ThemeProvider>
       <AuthProvider>
         <VerificationPendingModal />
+        <AuthModal />
         <HistoryProvider>
           <Head>
             <title>YouTube</title>

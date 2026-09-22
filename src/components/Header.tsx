@@ -48,7 +48,7 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
   const router = useRouter()
-  const { user, loginWithGoogle, logout }: any = useAuth()
+  const { user, openAuthModal, logout }: any = useAuth()
   const { themeMode, activeTheme } = useTheme()
   const [searchQuery, setSearchQuery] = useState("")
   const [isChannelDialogOpen, setIsChannelDialogOpen] = useState(false)
@@ -436,9 +436,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleSidebar }) => {
             </DropdownMenu>
           ) : (
             <Button
-              onClick={() => loginWithGoogle()}
+              onClick={() => openAuthModal()}
               variant="outline"
-              className="flex items-center gap-2 rounded-full border-blue-600 text-blue-600 dark:border-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 px-4 h-9 text-xs font-semibold"
+              className="flex items-center gap-2 rounded-full border-blue-600 text-blue-600 dark:border-blue-500 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 px-4 h-9 text-xs font-semibold cursor-pointer"
             >
               <User className="h-4 w-4" />
               <span>Sign in</span>

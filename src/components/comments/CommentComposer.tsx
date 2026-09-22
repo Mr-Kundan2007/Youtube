@@ -26,7 +26,7 @@ export const CommentComposer: React.FC<CommentComposerProps> = ({
   onCommentCreated,
   placeholder = "Add a comment...",
 }) => {
-  const { user, loginWithGoogle }: any = useAuth()
+  const { user, openAuthModal }: any = useAuth()
   const [text, setText] = useState("")
   const [isFocused, setIsFocused] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -196,7 +196,7 @@ export const CommentComposer: React.FC<CommentComposerProps> = ({
             </div>
             <Button
               type="button"
-              onClick={loginWithGoogle}
+              onClick={openAuthModal}
               className="h-10 sm:h-9 w-full sm:w-auto px-5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shrink-0 shadow-sm cursor-pointer"
             >
               <LogIn className="h-3.5 w-3.5" />
