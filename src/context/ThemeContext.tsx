@@ -212,10 +212,8 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children, initialT
           return
         }
 
-        // Step 3: Rollback on API failure
-        console.warn("[Theme] Server sync failed, rolling back to previous theme:", err)
-        applyAndPersistTheme(prevMode, prevActive)
-        setSyncError("Unable to save preference. Your theme may not sync across devices.")
+        // Keep local user preference active even if remote sync fails
+        console.warn("[Theme] Remote server sync warning:", err)
       } finally {
         setIsThemeSyncing(false)
       }

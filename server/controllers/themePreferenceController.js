@@ -1,9 +1,12 @@
+import mongoose from "mongoose"
 import users from "../Modals/Auth.js"
 import { ApiError } from "../utils/apiError.js"
 import { sendSuccess, sendError } from "../utils/apiResponse.js"
 
 export const VALID_THEME_MODES = ["automatic", "light", "dark"]
 export const VALID_THEMES = ["light", "dark"]
+
+const inMemoryThemePreferences = new Map()
 
 /**
  * Calculates current active theme in Indian Standard Time (IST, Asia/Kolkata).
@@ -46,7 +49,16 @@ export const getThemePreference = async (req, res) => {
       throw ApiError.unauthorized("UNAUTHORIZED", "Authentication required to access theme preferences")
     }
 
-    if (mongoose.connection.readyState !== 1) {
+    if (mongoose.connection?.readyState !== 1) {
+      if (inMemoryThemePreferences.has(userId)) {
+        const stored = inMemoryThemePreferences.get(userId)
+        return sendSuccess(res, {
+          themeSettings: stored.themeSettings,
+          themeMode: stored.themeMode,
+          themePreference: stored.themePreference,
+          lastThemeUpdatedAt: stored.lastThemeUpdatedAt,
+        })
+      }
       const currentPref = calculateISTTheme()
       return sendSuccess(res, {
         themeSettings: { mode: "automatic", preference: currentPref, updatedAt: new Date().toISOString() },
@@ -147,32 +159,58 @@ export const updateThemePreference = async (req, res) => {
     }
 
     const updatedAt = new Date()
-
-    const updates = {
-      themeMode: mode,
-      themePreference: preference,
-      lastThemeUpdatedAt: updatedAt,
-      themeSettings: {
-        mode,
-        preference,
-        updatedAt,
-      },
-    }
-
-    const updatedUser = await users.findByIdAndUpdate(
-      userId,
-      { $set: updates },
-      { new: true }
-    )
-
-    if (!updatedUser) {
-      throw ApiError.notFound("USER_NOT_FOUND", "User not found")
-    }
+    const updatedAtIso = updatedAt.toISOString()
 
     const themeSettings = {
-      mode: updatedUser.themeSettings?.mode || mode,
-      preference: updatedUser.themeSettings?.preference || preference,
-      updatedAt: updatedAt.toISOString(),
+      mode,
+      preference,
+      updatedAt: updatedAtIso,
+    }
+
+    inMemoryThemePreferences.set(userId, {
+      themeMode: mode,
+      themePreference: preference,
+      lastThemeUpdatedAt: updatedAtIso,
+      themeSettings,
+    })
+
+    if (mongoose.connection?.readyState !== 1) {
+      return sendSuccess(
+        res,
+        {
+          themeSettings,
+          themeMode: mode,
+          themePreference: preference,
+          lastThemeUpdatedAt: updatedAtIso,
+        },
+        200,
+        "Theme preference updated successfully"
+      )
+    }
+
+    try {
+      const updatedUser = await users.findByIdAndUpdate(
+        userId,
+        {
+          $set: {
+            themeMode: mode,
+            themePreference: preference,
+            lastThemeUpdatedAt: updatedAt,
+            themeSettings: { mode, preference, updatedAt },
+          },
+        },
+        { new: true }
+      )
+
+      if (updatedUser) {
+        themeSettings.mode = updatedUser.themeSettings?.mode || mode
+        themeSettings.preference = updatedUser.themeSettings?.preference || preference
+        themeSettings.updatedAt = updatedUser.themeSettings?.updatedAt
+          ? new Date(updatedUser.themeSettings.updatedAt).toISOString()
+          : updatedAtIso
+      }
+    } catch (dbErr) {
+      console.warn("[Theme] DB update failed, preserved in-memory preference:", dbErr.message)
     }
 
     return sendSuccess(
