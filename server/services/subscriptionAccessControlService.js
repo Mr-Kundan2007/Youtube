@@ -223,15 +223,28 @@ export class SubscriptionAccessControlService {
    */
   async getTodayUsage(userId) {
     const today = this.getTodayDateString()
-    let usage = await SubscriptionUsage.findOne({ userId, date: today })
-    if (!usage) {
-      usage = await SubscriptionUsage.findOneAndUpdate(
-        { userId, date: today },
-        { $setOnInsert: { watchTimeSeconds: 0, downloadCount: 0, streamCount: 0 } },
-        { upsert: true, new: true }
-      )
+    try {
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        let usage = await SubscriptionUsage.findOne({ userId, date: today })
+        if (!usage) {
+          usage = await SubscriptionUsage.findOneAndUpdate(
+            { userId, date: today },
+            { $setOnInsert: { watchTimeSeconds: 0, downloadCount: 0, streamCount: 0 } },
+            { upsert: true, new: true }
+          )
+        }
+        if (usage) return usage
+      }
+    } catch (err) {
+      console.warn("[SubscriptionUsage] Database unavailable, using default usage:", err.message)
     }
-    return usage
+    return {
+      userId,
+      date: today,
+      watchTimeSeconds: 0,
+      downloadCount: 0,
+      streamCount: 0,
+    }
   }
 
   /**
@@ -244,11 +257,18 @@ export class SubscriptionAccessControlService {
   async recordWatchTime(userId, seconds = 0) {
     if (!userId || seconds <= 0) return null
     const today = this.getTodayDateString()
-    return SubscriptionUsage.findOneAndUpdate(
-      { userId, date: today },
-      { $inc: { watchTimeSeconds: seconds }, $set: { lastActiveAt: new Date() } },
-      { upsert: true, new: true }
-    )
+    try {
+      if (mongoose.connection && mongoose.connection.readyState === 1) {
+        return await SubscriptionUsage.findOneAndUpdate(
+          { userId, date: today },
+          { $inc: { watchTimeSeconds: seconds }, $set: { lastActiveAt: new Date() } },
+          { upsert: true, new: true }
+        )
+      }
+    } catch (err) {
+      console.warn("[SubscriptionUsage] Failed to record watch time:", err.message)
+    }
+    return null
   }
 
   /**

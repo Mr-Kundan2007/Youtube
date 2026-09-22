@@ -339,7 +339,7 @@ if (process.env.NODE_ENV !== "test") {
 }
 
 const DBURL = process.env.DB_URL
-mongoose.set("bufferCommands", false)
+mongoose.set("bufferCommands", true)
 if (DBURL && mongoose.connection.readyState === 0) {
     mongoose.connect(DBURL, { serverSelectionTimeoutMS: 4000 }).then(async () => {
         console.log("Mongodb connected")
