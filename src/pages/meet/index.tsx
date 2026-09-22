@@ -20,7 +20,20 @@ export default function MeetLobbyPage() {
         title: `${hostName}'s Meeting`,
       })
       if (res?.roomId) {
-        router.push(`/meet/${res.roomId}${hostName ? `?name=${encodeURIComponent(hostName)}` : ""}`)
+        if (typeof window !== "undefined") {
+          try {
+            const hostSessionData = JSON.stringify({
+              token: res.token,
+              role: res.role || "HOST",
+              identity: res.identity,
+              livekitUrl: res.livekitUrl,
+              meeting: (res as any).meeting,
+            })
+            sessionStorage.setItem(`instant_host_${res.roomId}`, hostSessionData)
+            localStorage.setItem(`instant_host_${res.roomId}`, hostSessionData)
+          } catch (e) {}
+        }
+        router.push(`/meet/${res.roomId}?name=${encodeURIComponent(hostName)}&host=true`)
       }
     } catch (err: any) {
       console.error("Create meeting error:", err)

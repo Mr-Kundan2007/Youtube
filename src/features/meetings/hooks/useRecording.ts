@@ -59,7 +59,13 @@ export function useRecording({
   const remoteTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Host always has permission to record. Co-host can record if allowRecording is not disabled.
-  const isHost = userRole === "HOST"
+  const isHost =
+    userRole === "HOST" ||
+    (typeof window !== "undefined" &&
+      Boolean(
+        sessionStorage.getItem(`instant_host_${roomId}`) ||
+        localStorage.getItem(`instant_host_${roomId}`)
+      ))
   const isCoHost = userRole === "CO_HOST"
   const canRecord = isHost || (isCoHost && allowRecording !== false)
 

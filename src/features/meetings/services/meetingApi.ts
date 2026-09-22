@@ -9,32 +9,33 @@ import {
   MeetingRecordingInfo,
 } from "../types/meeting"
 
+const getMeetingAuthHeaders = (): Record<string, string> => {
+  let token = typeof window !== "undefined" ? localStorage.getItem("token") : null
+  if (!token && typeof window !== "undefined") {
+    const profile = localStorage.getItem("Profile")
+    if (profile) {
+      try {
+        const parsed = JSON.parse(profile)
+        token = parsed?.token
+      } catch {}
+    }
+  }
+  // Provide guest/instant meeting demo token if unauthenticated
+  if (!token && typeof window !== "undefined") {
+    token = "demo-token"
+    try {
+      localStorage.setItem("token", "demo-token")
+    } catch {}
+  }
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 export const meetingApi = {
   /**
    * Creates a new meeting room.
    */
   async createMeeting(payload: MeetingCreatePayload = {}): Promise<MeetingJoinResponse> {
-    let token = typeof window !== "undefined" ? localStorage.getItem("token") : null
-    if (!token && typeof window !== "undefined") {
-      const profile = localStorage.getItem("Profile")
-      if (profile) {
-        try {
-          const parsed = JSON.parse(profile)
-          token = parsed?.token
-        } catch {}
-      }
-    }
-    // Provide guest/instant meeting demo token if unauthenticated
-    if (!token && typeof window !== "undefined") {
-      token = "demo-token"
-      try {
-        localStorage.setItem("token", "demo-token")
-      } catch {}
-    }
-    const headers: Record<string, string> = {}
-    if (token) {
-      headers.Authorization = `Bearer ${token}`
-    }
+    const headers = getMeetingAuthHeaders()
     const { data } = await API.post("/api/meetings", payload, { headers })
     return data.data
   },
@@ -43,7 +44,8 @@ export const meetingApi = {
    * Fetches meeting information and status.
    */
   async getMeeting(roomId: string): Promise<MeetingDetails> {
-    const { data } = await API.get(`/api/meetings/${roomId}`)
+    const headers = getMeetingAuthHeaders()
+    const { data } = await API.get(`/api/meetings/${roomId}`, { headers })
     return data.data.meeting || data.data
   },
 
@@ -54,7 +56,8 @@ export const meetingApi = {
     roomId: string,
     payload: JoinMeetingPayload = {}
   ): Promise<MeetingJoinResponse> {
-    const { data } = await API.post(`/api/meetings/${roomId}/join`, payload)
+    const headers = getMeetingAuthHeaders()
+    const { data } = await API.post(`/api/meetings/${roomId}/join`, payload, { headers })
     return data.data
   },
 
@@ -235,7 +238,8 @@ export const meetingApi = {
       status: string
     }
   }> {
-    const { data } = await API.post(`/api/meetings/${roomId}/recordings/start`)
+    const headers = getMeetingAuthHeaders()
+    const { data } = await API.post(`/api/meetings/${roomId}/recordings/start`, {}, { headers })
     return data.data
   },
 
@@ -249,7 +253,8 @@ export const meetingApi = {
     endedAt: string
     durationSeconds: number
   }> {
-    const { data } = await API.post(`/api/meetings/${roomId}/recordings/stop`)
+    const headers = getMeetingAuthHeaders()
+    const { data } = await API.post(`/api/meetings/${roomId}/recordings/stop`, {}, { headers })
     return data.data
   },
 
@@ -277,7 +282,12 @@ export const meetingApi = {
     if (title) formData.append("title", title)
     if (recordingId) formData.append("recordingId", recordingId)
 
+    const headers = {
+      ...getMeetingAuthHeaders(),
+    }
+
     const { data } = await API.post(`/api/meetings/${roomId}/recordings/upload`, formData, {
+      headers,
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total && onProgress) {
           const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total)

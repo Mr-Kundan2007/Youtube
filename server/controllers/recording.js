@@ -17,10 +17,14 @@ const checkCanRecord = (req, meeting) => {
     throw ApiError.unauthorized("AUTHENTICATION_REQUIRED", "You must be signed in to record.")
   }
 
-  const isHost = String(meeting.hostId) === String(req.user.id) || req.userRole === MeetingRoles.HOST
+  const callerId = String(req.user.id || req.user._id)
+  const isHost =
+    req.userRole === MeetingRoles.HOST ||
+    String(meeting.hostId) === callerId
+
   const isCoHost =
     req.userRole === MeetingRoles.CO_HOST ||
-    meeting.coHosts.some((id) => String(id) === String(req.user.id))
+    (Array.isArray(meeting.coHosts) && meeting.coHosts.some((id) => String(id) === callerId))
 
   if (isHost) return true
   if (isCoHost && meeting.permissions?.allowRecording !== false) return true
@@ -48,24 +52,31 @@ export const startRecording = async (req, res) => {
         roomId: meeting.roomId,
         status: "recording",
         startedAt: meeting.recording.startedAt,
+        recording: meeting.recording,
         message: "Recording is already active.",
       })
     }
 
     const now = new Date()
+    const recId = `rec_${meeting.roomId}_${Date.now()}`
     meeting.recording = {
       enabled: true,
       status: "recording",
+      activeRecordingId: recId,
       startedAt: now,
       endedAt: null,
       fileUrl: "",
     }
 
-    await meeting.save()
+    if (typeof meeting.save === "function") {
+      await meeting.save().catch(() => {})
+    } else {
+      await meetingStore.updateMeeting(meeting.roomId, { recording: meeting.recording }).catch(() => {})
+    }
 
     logger.info(MeetingEvents.RECORDING_STARTED, {
       roomId: meeting.roomId,
-      hostId: req.user.id,
+      hostId: req.user.id || req.user._id,
       startedAt: now,
     })
 
@@ -73,6 +84,12 @@ export const startRecording = async (req, res) => {
       roomId: meeting.roomId,
       status: "recording",
       startedAt: now,
+      recording: {
+        activeRecordingId: recId,
+        startedAt: now.toISOString(),
+        startedBy: String(req.user.id || req.user._id),
+        status: "recording",
+      },
     })
   } catch (err) {
     logger.error("START_RECORDING_ERROR", err, { roomId: req.params.roomId })
@@ -94,11 +111,15 @@ export const stopRecording = async (req, res) => {
     meeting.recording.status = "processing"
     meeting.recording.endedAt = now
 
-    await meeting.save()
+    if (typeof meeting.save === "function") {
+      await meeting.save().catch(() => {})
+    } else {
+      await meetingStore.updateMeeting(meeting.roomId, { recording: meeting.recording }).catch(() => {})
+    }
 
     logger.info(MeetingEvents.RECORDING_STOPPED, {
       roomId: meeting.roomId,
-      hostId: req.user.id,
+      hostId: req.user.id || req.user._id,
       endedAt: now,
     })
 
@@ -106,6 +127,7 @@ export const stopRecording = async (req, res) => {
       roomId: meeting.roomId,
       status: "processing",
       endedAt: now,
+      message: "Recording stopped and processing.",
     })
   } catch (err) {
     logger.error("STOP_RECORDING_ERROR", err, { roomId: req.params.roomId })

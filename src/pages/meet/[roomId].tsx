@@ -42,18 +42,53 @@ export default function MeetingRoomPage() {
       setLobbyState("LOADING")
       setErrorMessage(null)
 
+      // 1. Immediately check if current client created or launched this meeting as instant host
+      const storedHostData =
+        typeof window !== "undefined"
+          ? sessionStorage.getItem(`instant_host_${cleanRoomId}`) ||
+            localStorage.getItem(`instant_host_${cleanRoomId}`)
+          : null
+
+      if (storedHostData) {
+        try {
+          const parsed = JSON.parse(storedHostData)
+          if (parsed?.token && parsed?.identity) {
+            setToken(parsed.token)
+            setIdentity(parsed.identity)
+            setLivekitUrl(parsed.livekitUrl)
+            setRole("HOST")
+            if (parsed.meeting) {
+              setMeeting(parsed.meeting)
+            }
+            setIsJoined(true)
+            setLobbyState("ACCESS_GRANTED")
+
+            // Refresh latest meeting details in background without blocking host
+            meetingApi.getMeeting(cleanRoomId).then((details) => {
+              if (details) setMeeting(details)
+            }).catch(() => {})
+            return
+          }
+        } catch (e) {}
+      }
+
       const details = await meetingApi.getMeeting(cleanRoomId)
       setMeeting(details)
 
-      // 1. Status checks
+      // 2. Status checks
       const statusUpper = details.status?.toUpperCase()
       if (statusUpper === "ENDED" || statusUpper === "CANCELLED") {
         setLobbyState("ENDED")
         return
       }
 
-      // 2. Auth policy checks
-      const isHost = user && String(details.hostId) === String(user.id)
+      // 3. Auth policy checks
+      const currentUserId = user?._id || user?.id
+      const isHost = Boolean(
+        router.query.host === "true" ||
+        storedHostData ||
+        (currentUserId && String(details.hostId) === String(currentUserId))
+      )
       if (details.accessPolicy === "AUTHENTICATED_ONLY" && !user) {
         setLobbyState("AUTH_REQUIRED")
         return
@@ -129,7 +164,8 @@ export default function MeetingRoomPage() {
       setToken(res.token)
       setIdentity(res.identity)
       setLivekitUrl(res.livekitUrl)
-      setRole(res.role)
+      const resolvedRole = isHost ? "HOST" : (res.role || "PARTICIPANT")
+      setRole(resolvedRole)
       setIsJoined(true)
       setLobbyState("ACCESS_GRANTED")
     } catch (err: any) {
@@ -173,7 +209,18 @@ export default function MeetingRoomPage() {
   // Determine initial display name
   const initialDisplayName =
     queryName || user?.channelname || user?.name || ""
-  const isHost = Boolean(user && meeting && String(meeting.hostId) === String(user.id))
+  const currentUserId = user?._id || user?.id
+  const hasStoredHost = Boolean(
+    cleanRoomId &&
+    typeof window !== "undefined" &&
+    (sessionStorage.getItem(`instant_host_${cleanRoomId}`) || localStorage.getItem(`instant_host_${cleanRoomId}`))
+  )
+  const isHost = Boolean(
+    router.query.host === "true" ||
+    hasStoredHost ||
+    (currentUserId && meeting && String(meeting.hostId) === String(currentUserId))
+  )
+  const effectiveRole: MeetingRole = isHost ? "HOST" : role
 
   // 1. Loading State
   if (lobbyState === "LOADING") {
@@ -229,7 +276,7 @@ export default function MeetingRoomPage() {
           token={token}
           identity={identity}
           livekitUrl={livekitUrl}
-          role={role}
+          role={effectiveRole}
           initialMuted={initialMuted}
           initialCameraOff={initialCameraOff}
           participantName={joinedDisplayName || initialDisplayName || "You"}

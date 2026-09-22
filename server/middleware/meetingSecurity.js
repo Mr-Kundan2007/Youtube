@@ -45,9 +45,11 @@ export const validateMeetingState = async (req, res, next) => {
     // Determine role authoritatively on the server
     let role = MeetingRoles.PARTICIPANT
     if (req.user) {
-      if (String(meeting.hostId) === String(req.user.id)) {
+      const callerId = String(req.user.id || req.user._id)
+      const hostId = String(meeting.hostId)
+      if (hostId === callerId) {
         role = MeetingRoles.HOST
-      } else if (meeting.coHosts && Array.isArray(meeting.coHosts) && meeting.coHosts.some((id) => String(id) === String(req.user.id))) {
+      } else if (Array.isArray(meeting.coHosts) && meeting.coHosts.some((id) => String(id) === callerId)) {
         role = MeetingRoles.CO_HOST
       }
     }

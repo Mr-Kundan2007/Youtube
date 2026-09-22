@@ -94,6 +94,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
 
 
   const isHostOrCoHost = userRole === "HOST" || userRole === "CO_HOST"
+  const effectiveCanRecord = canRecord || isHostOrCoHost
 
   return (
     <nav
@@ -298,7 +299,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
         {onToggleRecord && (
           <button
             onClick={() => {
-              if (canRecord || isRecording) {
+              if (effectiveCanRecord || isRecording) {
                 onToggleRecord()
               } else {
                 alert("Only meeting hosts and co-hosts can start recordings.")
@@ -309,14 +310,14 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
             className={`relative p-3 rounded-full transition-all duration-150 flex items-center justify-center touch-target-44 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none ${
               isRecording
                 ? "bg-red-600 text-white shadow-[0_0_15px_rgba(220,38,38,0.5)] animate-pulse"
-                : canRecord
+                : effectiveCanRecord
                 ? "bg-white/10 hover:bg-white/20 text-white"
                 : "bg-white/5 hover:bg-white/10 text-zinc-400"
             } disabled:opacity-50`}
             title={
               isRecording
                 ? "Stop Recording"
-                : canRecord
+                : effectiveCanRecord
                 ? "Record Meeting"
                 : "Record Meeting (Host only)"
             }
@@ -325,7 +326,7 @@ export const MeetingControls: React.FC<MeetingControlsProps> = ({
               className={`w-5 h-5 ${
                 isRecording
                   ? "animate-spin text-white"
-                  : canRecord
+                  : effectiveCanRecord
                   ? "text-red-500"
                   : "text-zinc-500"
               }`}

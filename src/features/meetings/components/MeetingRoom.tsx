@@ -633,7 +633,7 @@ const MeetingRoomContent: React.FC<MeetingRoomProps> = ({
         canFlipCamera={videoInputs.length > 1 || isMobile}
         allowScreenShare={meeting.permissions?.allowScreenShare !== false}
         isRecording={isRecording}
-        canRecord={canRecord}
+        canRecord={canRecord || role === "HOST" || role === "CO_HOST"}
         isRecordingLoading={recordingStatus === "starting" || recordingStatus === "stopping" || recordingStatus === "uploading"}
         onToggleRecord={handleToggleRecord}
         onToggleMic={toggleMic}

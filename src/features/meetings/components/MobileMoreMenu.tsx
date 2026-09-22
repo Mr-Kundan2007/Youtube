@@ -68,6 +68,7 @@ export const MobileMoreMenu: React.FC<MobileMoreMenuProps> = ({
 }) => {
   const sheetRef = useRef<HTMLDivElement | null>(null)
   const isHostOrCoHost = userRole === "HOST" || userRole === "CO_HOST"
+  const effectiveCanRecord = canRecord || isHostOrCoHost
 
   // Focus management & Escape listener
   useEffect(() => {
@@ -208,7 +209,7 @@ export const MobileMoreMenu: React.FC<MobileMoreMenuProps> = ({
           {onToggleRecord && (
             <button
               onClick={() => {
-                if (canRecord || isRecording) {
+                if (effectiveCanRecord || isRecording) {
                   onToggleRecord()
                   onClose()
                 } else {
