@@ -27,13 +27,15 @@ export const VideoQualityInfo: React.FC<VideoQualityInfoProps> = ({ className = 
     sourceType: "MP4",
   }
 
+  const setIsMenuOpen = actions.setIsMenuOpen
+
   // Sync menu state with player auto-hide system
   useEffect(() => {
-    actions.setIsMenuOpen(isOpen)
+    setIsMenuOpen(isOpen)
     return () => {
-      actions.setIsMenuOpen(false)
+      setIsMenuOpen(false)
     }
-  }, [isOpen, actions])
+  }, [isOpen, setIsMenuOpen])
   useEffect(() => {
     if (!isOpen) return
 

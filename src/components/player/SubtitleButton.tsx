@@ -23,13 +23,15 @@ export const SubtitleButton: React.FC<SubtitleButtonProps> = ({ className = "" }
   const subtitleTracks = tracks.filter((t) => t.kind !== "captions")
   const captionTracks = tracks.filter((t) => t.kind === "captions")
 
+  const setIsMenuOpen = actions.setIsMenuOpen
+
   // Sync menu state with player auto-hide system
   useEffect(() => {
-    actions.setIsMenuOpen(isOpen)
+    setIsMenuOpen(isOpen)
     return () => {
-      actions.setIsMenuOpen(false)
+      setIsMenuOpen(false)
     }
-  }, [isOpen, actions])
+  }, [isOpen, setIsMenuOpen])
   useEffect(() => {
     if (!isOpen) return
 

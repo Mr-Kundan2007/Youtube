@@ -18,14 +18,15 @@ export const PlaybackSpeed: React.FC<PlaybackSpeedProps> = ({ className = "" }) 
   const buttonRef = useRef<HTMLButtonElement | null>(null)
 
   const currentRate = state.playbackRate || 1
+  const setIsMenuOpen = actions.setIsMenuOpen
 
   // Sync menu state with player auto-hide system
   useEffect(() => {
-    actions.setIsMenuOpen(isOpen)
+    setIsMenuOpen(isOpen)
     return () => {
-      actions.setIsMenuOpen(false)
+      setIsMenuOpen(false)
     }
-  }, [isOpen, actions])
+  }, [isOpen, setIsMenuOpen])
   useEffect(() => {
     if (!isOpen) return
 
