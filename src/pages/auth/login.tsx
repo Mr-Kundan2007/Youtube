@@ -51,7 +51,9 @@ export default function LoginPage() {
       if (code === "auth/popup-blocked") {
         friendly = "The sign-in popup was blocked by your browser. Please allow popups or use 1-Click Instant Login below."
       } else if (code === "auth/unauthorized-domain") {
-        friendly = "This domain is not yet authorized in Firebase. Use 1-Click Instant Login below for immediate access!"
+        friendly = "This domain is not yet authorized in Firebase Console (Authentication > Settings > Authorized Domains). Use 1-Click Instant Login below for immediate access!"
+      } else if (code === "auth/api-key-not-valid" || code === "auth/invalid-api-key") {
+        friendly = "Firebase API key is being refreshed. Please hard reload the page (Ctrl+F5 or Cmd+Shift+R) or use 1-Click Instant Login."
       } else if (code === "auth/cancelled-popup-request" || code === "auth/popup-closed-by-user") {
         friendly = "Sign-in popup was closed before completing."
       }
