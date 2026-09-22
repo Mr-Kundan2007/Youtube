@@ -29,15 +29,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { transactionId, razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body || {}
 
-    const secret = process.env.RAZORPAY_KEY_SECRET || "mock_razorpay_secret_key_87654321"
+    const secret = process.env.RAZORPAY_KEY_SECRET || "offfCXTLPh96q52TtPTBM9jC"
 
-    let verified = true
-    if (razorpay_order_id && razorpay_payment_id && razorpay_signature && !secret.includes("mock_")) {
+    let verified = false
+    if (razorpay_order_id && razorpay_payment_id && razorpay_signature) {
       const expectedSignature = crypto
-        .createHmac("sha256", secret)
+        .createHmac("sha256", secret.trim())
         .update(`${razorpay_order_id}|${razorpay_payment_id}`)
         .digest("hex")
       verified = expectedSignature === razorpay_signature
+    } else if (secret.includes("mock_")) {
+      verified = true
+    }
+
+    if (!verified && !secret.includes("mock_")) {
+      return res.status(400).json({
+        success: false,
+        code: "SIGNATURE_VERIFICATION_FAILED",
+        message: "Payment signature verification failed. Your card/account was not verified.",
+      })
     }
 
     const now = new Date()

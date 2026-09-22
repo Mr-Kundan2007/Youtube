@@ -52,9 +52,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const amountPaise = Math.round(amountRupees * 100)
 
     const internalTransactionId = `PAY-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`
-    const orderId = `order_${crypto.randomBytes(10).toString("hex")}`
     const receipt = `rcpt_${internalTransactionId}`
-    const keyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || "rzp_test_mockkey12345678"
+    const keyId = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_live_TfAubcRfFmUfVA"
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || "offfCXTLPh96q52TtPTBM9jC"
+
+    let orderId = ""
+
+    // Create real order in Razorpay
+    if (keyId && keySecret && !keyId.includes("mockkey") && !keySecret.includes("mock_")) {
+      try {
+        const basicAuth = Buffer.from(`${keyId.trim()}:${keySecret.trim()}`).toString("base64")
+        const rzpResponse = await fetch("https://api.razorpay.com/v1/orders", {
+          method: "POST",
+          headers: {
+            Authorization: `Basic ${basicAuth}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            amount: amountPaise,
+            currency: "INR",
+            receipt,
+            notes: {
+              planKey: planSlug,
+              planName: planConfig.name,
+              validityType: cycle,
+              internalTransactionId,
+            },
+          }),
+        })
+
+        if (rzpResponse.ok) {
+          const rzpData = await rzpResponse.json()
+          if (rzpData?.id) {
+            orderId = rzpData.id
+          }
+        } else {
+          const errData = await rzpResponse.text().catch(() => "")
+          console.error("[NextApi] Razorpay order creation failed:", errData)
+        }
+      } catch (rzpErr) {
+        console.error("[NextApi] Razorpay API network error:", rzpErr)
+      }
+    }
+
+    // Fallback if not configured or sandbox mode
+    if (!orderId) {
+      orderId = `order_${crypto.randomBytes(10).toString("hex")}`
+    }
 
     return res.status(201).json({
       success: true,

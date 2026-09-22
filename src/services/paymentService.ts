@@ -498,6 +498,13 @@ export const openRazorpayCheckout = async (
   // Load official Razorpay SDK
   const isLoaded = await loadRazorpayScript()
   if (!isLoaded || typeof (window as any).Razorpay === "undefined") {
+    if (orderData.keyId && !orderData.keyId.includes("mockkey")) {
+      callbacks.onFailure?.({
+        code: "SCRIPT_LOAD_FAILED",
+        description: "Could not load Razorpay checkout gateway from CDN. Please check your internet connection or ad-blocker.",
+      })
+      return
+    }
     console.warn("[Razorpay] CDN unavailable, falling back to sandbox simulator.")
     openSandboxSimulationModal(orderData, callbacks)
     return
@@ -554,8 +561,15 @@ export const openRazorpayCheckout = async (
     })
     rzp.open()
   } catch (sdkErr: any) {
-    console.warn("[Razorpay] SDK initialization failed, launching sandbox simulation:", sdkErr)
-    openSandboxSimulationModal(orderData, callbacks)
+    console.error("[Razorpay] SDK initialization failed:", sdkErr)
+    if (orderData.keyId && !orderData.keyId.includes("mockkey")) {
+      callbacks.onFailure?.({
+        code: "SDK_ERROR",
+        description: sdkErr?.message || "Razorpay payment window failed to initialize. Please check your connection and try again.",
+      })
+    } else {
+      openSandboxSimulationModal(orderData, callbacks)
+    }
   }
 }
 
