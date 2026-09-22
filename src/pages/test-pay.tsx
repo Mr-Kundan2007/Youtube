@@ -1,5 +1,6 @@
 import React, { useState } from "react"
 import Head from "next/head"
+import Script from "next/script"
 
 export default function TestPay() {
   const [logs, setLogs] = useState<string[]>([])
@@ -83,8 +84,8 @@ export default function TestPay() {
     <div style={{ minHeight: "100vh", background: "#0a0a0a", color: "#fff", padding: "40px", fontFamily: "sans-serif" }}>
       <Head>
         <title>Razorpay Test</title>
-        <script src="https://checkout.razorpay.com/v1/checkout.js" async />
       </Head>
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
 
       <div style={{ maxWidth: "600px", margin: "0 auto" }}>
         <h1>Razorpay Live Test Page</h1>
