@@ -87,17 +87,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             orderId = rzpData.id
           }
         } else {
-          const errData = await rzpResponse.text().catch(() => "")
+          const errData = await rzpResponse.json().catch(() => null)
           console.error("[NextApi] Razorpay order creation failed:", errData)
+          return res.status(rzpResponse.status || 400).json({
+            success: false,
+            code: "RAZORPAY_API_ERROR",
+            message:
+              errData?.error?.description ||
+              errData?.error?.message ||
+              "Razorpay API rejected order creation. Please check your Razorpay API key permissions.",
+            details: errData?.error,
+          })
         }
-      } catch (rzpErr) {
+      } catch (rzpErr: any) {
         console.error("[NextApi] Razorpay API network error:", rzpErr)
+        return res.status(502).json({
+          success: false,
+          code: "RAZORPAY_NETWORK_ERROR",
+          message: rzpErr.message || "Failed to reach Razorpay API servers.",
+        })
       }
     }
 
-    // Fallback if not configured or sandbox mode
     if (!orderId) {
-      orderId = `order_${crypto.randomBytes(10).toString("hex")}`
+      return res.status(400).json({
+        success: false,
+        code: "CONFIG_ERROR",
+        message: "Razorpay Key ID and Secret are required to create payment orders.",
+      })
     }
 
     return res.status(201).json({

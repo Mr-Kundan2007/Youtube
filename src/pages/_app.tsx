@@ -2,6 +2,7 @@ import "@/styles/globals.css"
 import React, { useState } from "react"
 import type { AppProps } from "next/app"
 import Head from "next/head"
+import Script from "next/script"
 import { Header } from "@/components/Header"
 import { Sidebar } from "@/components/Sidebar"
 import { MobileBottomNav } from "@/components/MobileBottomNav"
@@ -28,6 +29,10 @@ export default function App({ Component, pageProps }: AppProps) {
             <meta name="description" content="YouTube Clone built with Next.js and Tailwind CSS" />
             <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
           </Head>
+          <Script
+            src="https://checkout.razorpay.com/v1/checkout.js"
+            strategy="afterInteractive"
+          />
           {isMeetingRoom ? (
             <main className="w-full min-h-screen bg-zinc-950 text-neutral-100">
               <Component {...pageProps} />

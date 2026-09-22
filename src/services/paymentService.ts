@@ -237,31 +237,14 @@ export const createPaymentOrder = async (params: CreateOrderParams): Promise<Pay
     throw authErr
   }
 
-  // Graceful Sandbox / Test Mode order fallback (enables seamless testing in preview/dev)
-  const amountRupees = PLAN_AMOUNTS[planKey]?.[cycle as keyof typeof PLAN_AMOUNTS.bronze] || 499
-  const amountPaise = amountRupees * 100
-  const randomSuffix = Math.random().toString(36).substring(2, 8).toUpperCase()
-  const internalTransactionId = `PAY-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${randomSuffix}`
-  const orderId = `order_${Math.random().toString(36).substring(2, 12)}`
-
-  return {
-    transactionId: `txn_${Date.now()}`,
-    internalTransactionId,
-    paymentAttemptId: `attempt_${Date.now()}`,
-    orderId,
-    amount: amountPaise,
-    currency: "INR",
-    keyId: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_test_mockkey12345678",
-    receipt: `rcpt_${internalTransactionId}`,
-    plan: {
-      id: params.planId,
-      slug: planKey,
-      name: planKey.charAt(0).toUpperCase() + planKey.slice(1),
-      validityType: cycle,
-      displayPrice: `₹${amountRupees}`,
-    },
-    actionType: params.actionType || "new_subscription",
-  }
+  const errMessage =
+    result.error?.message ||
+    result.data?.message ||
+    "Unable to create Razorpay payment order. Please verify connection and try again."
+  const orderErr = new Error(errMessage) as any
+  orderErr.code = result.error?.code || "ORDER_CREATION_FAILED"
+  orderErr.status = result.status
+  throw orderErr
 }
 
 /**
@@ -281,31 +264,14 @@ export const verifyPayment = async (
     return result.data
   }
 
-  // Fallback successful simulation for sandbox test mode
-  const now = new Date()
-  const expiry = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-  const invoiceNumber = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).substring(2, 7).toUpperCase()}`
-
-  return {
-    verified: true,
-    plan: "silver",
-    planName: "Silver",
-    expiresAt: expiry.toISOString(),
-    startDate: now.toISOString(),
-    invoiceNumber,
-    transactionId: payload.transactionId || `txn_${Date.now()}`,
-    subscription: {
-      plan: "silver",
-      status: "active",
-      startDate: now.toISOString(),
-      expiryDate: expiry.toISOString(),
-    },
-    invoice: {
-      invoiceNumber,
-      amount: 499,
-      currency: "INR",
-    },
-  }
+  const errorMsg =
+    result.error?.message ||
+    result.data?.message ||
+    "Payment verification failed. Your payment could not be verified by the gateway."
+  const verifyErr = new Error(errorMsg) as any
+  verifyErr.code = result.error?.code || "SIGNATURE_VERIFICATION_FAILED"
+  verifyErr.status = result.status
+  throw verifyErr
 }
 
 /**
@@ -372,6 +338,9 @@ export const recordPaymentFailure = async (
 /**
  * Safely loads the Razorpay checkout script on demand.
  */
+/**
+ * Safely loads the official Razorpay checkout script on demand.
+ */
 export const loadRazorpayScript = (): Promise<boolean> => {
   return new Promise((resolve) => {
     if (typeof window === "undefined") {
@@ -382,144 +351,84 @@ export const loadRazorpayScript = (): Promise<boolean> => {
       return resolve(true)
     }
 
+    const existingScript = document.querySelector<HTMLScriptElement>(
+      'script[src*="checkout.razorpay.com"]'
+    )
+    if (existingScript) {
+      let attempts = 0
+      const poll = setInterval(() => {
+        if ((window as any).Razorpay) {
+          clearInterval(poll)
+          return resolve(true)
+        }
+        attempts++
+        if (attempts >= 50) {
+          clearInterval(poll)
+          resolve(!!(window as any).Razorpay)
+        }
+      }, 100)
+      return
+    }
+
     const script = document.createElement("script")
     script.src = "https://checkout.razorpay.com/v1/checkout.js"
     script.async = true
-    script.onload = () => resolve(true)
+    script.onload = () => {
+      let attempts = 0
+      const poll = setInterval(() => {
+        if ((window as any).Razorpay) {
+          clearInterval(poll)
+          return resolve(true)
+        }
+        attempts++
+        if (attempts >= 20) {
+          clearInterval(poll)
+          resolve(!!(window as any).Razorpay)
+        }
+      }, 50)
+    }
     script.onerror = () => {
-      console.warn("Failed to load Razorpay Checkout script from CDN, sandbox fallback ready.")
+      console.error("[Razorpay] Failed to load checkout script from CDN.")
       resolve(false)
     }
 
-    document.body.appendChild(script)
+    document.head.appendChild(script)
   })
 }
 
 /**
- * Displays a lightweight in-app Sandbox Simulation Modal for test mode.
- */
-const openSandboxSimulationModal = (
-  orderData: PaymentOrderData,
-  callbacks: CheckoutCallbacks
-) => {
-  const existingModal = document.getElementById("sandbox-simulation-modal")
-  if (existingModal) existingModal.remove()
-
-  const modalOverlay = document.createElement("div")
-  modalOverlay.id = "sandbox-simulation-modal"
-  modalOverlay.style.cssText = `
-    position: fixed; inset: 0; z-index: 99999;
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(8px);
-    font-family: system-ui, -apple-system, sans-serif;
-  `
-
-  const modalBox = document.createElement("div")
-  modalBox.style.cssText = `
-    width: 90%; max-width: 440px; background: #121212; border: 1px solid #27272a;
-    border-radius: 20px; padding: 24px; color: #fff; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-  `
-
-  modalBox.innerHTML = `
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-      <div style="display:flex; align-items:center; gap:8px;">
-        <span style="background:rgba(225,29,72,0.15); color:#f43f5e; padding:4px 10px; border-radius:999px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Razorpay Test Sandbox</span>
-      </div>
-      <button id="sandbox-close-btn" style="background:none; border:none; color:#a1a1aa; font-size:20px; cursor:pointer;">&times;</button>
-    </div>
-    <h3 style="margin:0 0 4px 0; font-size:18px; font-weight:700; color:#fff;">Complete Test Payment</h3>
-    <p style="margin:0 0 16px 0; font-size:13px; color:#a1a1aa;">Sandbox mode active. Simulate gateway checkout for <strong>${orderData.plan.name} Plan (${orderData.plan.validityType})</strong>.</p>
-    
-    <div style="background:#18181b; border:1px solid #27272a; border-radius:12px; padding:14px; margin-bottom:20px;">
-      <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size:13px; color:#a1a1aa;">
-        <span>Plan</span>
-        <strong style="color:#fff;">${orderData.plan.name} (${orderData.plan.validityType})</strong>
-      </div>
-      <div style="display:flex; justify-content:space-between; font-size:13px; color:#a1a1aa;">
-        <span>Total Payable</span>
-        <strong style="color:#10b981; font-size:16px;">${orderData.plan.displayPrice}</strong>
-      </div>
-    </div>
-
-    <div style="display:flex; flex-direction:column; gap:10px;">
-      <button id="sandbox-pay-success" style="width:100%; padding:12px; border-radius:12px; border:none; background:#e11d48; color:#fff; font-weight:700; font-size:14px; cursor:pointer; box-shadow:0 10px 15px -3px rgba(225,29,72,0.3);">
-        ✓ Simulate Successful Payment
-      </button>
-      <button id="sandbox-pay-fail" style="width:100%; padding:10px; border-radius:12px; border:1px solid #3f3f46; background:#27272a; color:#f43f5e; font-weight:600; font-size:13px; cursor:pointer;">
-        ✕ Simulate Failed Payment
-      </button>
-      <button id="sandbox-pay-dismiss" style="width:100%; padding:8px; border-radius:12px; border:none; background:transparent; color:#71717a; font-size:12px; cursor:pointer;">
-        Dismiss
-      </button>
-    </div>
-  `
-
-  modalOverlay.appendChild(modalBox)
-  document.body.appendChild(modalOverlay)
-
-  const cleanup = () => modalOverlay.remove()
-
-  document.getElementById("sandbox-close-btn")?.addEventListener("click", () => {
-    cleanup()
-    callbacks.onDismiss?.()
-  })
-
-  document.getElementById("sandbox-pay-dismiss")?.addEventListener("click", () => {
-    cleanup()
-    callbacks.onDismiss?.()
-  })
-
-  document.getElementById("sandbox-pay-fail")?.addEventListener("click", () => {
-    cleanup()
-    callbacks.onFailure?.({ code: "PAYMENT_CANCELLED", description: "Payment simulation cancelled by user" })
-  })
-
-  document.getElementById("sandbox-pay-success")?.addEventListener("click", () => {
-    cleanup()
-    callbacks.onSuccess({
-      razorpay_payment_id: `pay_${Date.now()}`,
-      razorpay_order_id: orderData.orderId,
-      razorpay_signature: `sig_sandbox_${Date.now()}`,
-    })
-  })
-}
-
-/**
- * Initializes and opens Razorpay Test Mode checkout using safe order data.
- * Falls back to interactive sandbox simulation if running with mock test keys.
+ * Initializes and opens genuine Razorpay checkout modal using official SDK.
  */
 export const openRazorpayCheckout = async (
   orderData: PaymentOrderData,
   userDetails: CheckoutUserDetails = {},
   callbacks: CheckoutCallbacks
-): Promise<void> => {
-  // If running with mock key (e.g. rzp_test_mockkey...), show interactive sandbox modal
-  if (!orderData.keyId || orderData.keyId.includes("mockkey") || !orderData.keyId.startsWith("rzp_")) {
-    openSandboxSimulationModal(orderData, callbacks)
+): Promise<{ rzp?: any; open: () => void } | void> => {
+  if (!orderData.keyId) {
+    callbacks.onFailure?.({
+      code: "MISSING_KEY_ID",
+      description: "Razorpay Key ID is not configured. Please check your environment settings.",
+    })
     return
   }
 
   // Load official Razorpay SDK
   const isLoaded = await loadRazorpayScript()
   if (!isLoaded || typeof (window as any).Razorpay === "undefined") {
-    if (orderData.keyId && !orderData.keyId.includes("mockkey")) {
-      callbacks.onFailure?.({
-        code: "SCRIPT_LOAD_FAILED",
-        description: "Could not load Razorpay checkout gateway from CDN. Please check your internet connection or ad-blocker.",
-      })
-      return
-    }
-    console.warn("[Razorpay] CDN unavailable, falling back to sandbox simulator.")
-    openSandboxSimulationModal(orderData, callbacks)
+    callbacks.onFailure?.({
+      code: "SCRIPT_LOAD_FAILED",
+      description:
+        "Could not load Razorpay checkout gateway from CDN. Please check your internet connection or ad-blocker.",
+    })
     return
   }
 
   try {
     const options = {
-      key: orderData.keyId,
+      key: orderData.keyId.trim(),
       amount: orderData.amount, // in paise
       currency: orderData.currency || "INR",
-      name: "Video & Learning Platform",
+      name: "Stream & Learn Platform",
       description: `${orderData.plan.name} Plan Subscription (${orderData.plan.validityType})`,
       order_id: orderData.orderId,
       prefill: {
@@ -533,7 +442,7 @@ export const openRazorpayCheckout = async (
         validityType: orderData.plan.validityType,
       },
       theme: {
-        color: "#e11d48", // rose-600 to match platform branding
+        color: "#e11d48", // rose-600 platform theme
       },
       handler: function (response: any) {
         if (callbacks.onSuccess) {
@@ -558,22 +467,22 @@ export const openRazorpayCheckout = async (
     const rzp = new (window as any).Razorpay(options)
     rzp.on("payment.failed", function (response: any) {
       callbacks.onFailure?.({
-        code: response?.error?.code,
-        description: response?.error?.description,
-        reason: response?.error?.reason,
+        code: response?.error?.code || "PAYMENT_FAILED",
+        description: response?.error?.description || "Payment was declined by bank or gateway",
+        reason: response?.error?.reason || response?.error?.step || "decline",
       })
     })
+
     rzp.open()
+    return { rzp, open: () => rzp.open() }
   } catch (sdkErr: any) {
     console.error("[Razorpay] SDK initialization failed:", sdkErr)
-    if (orderData.keyId && !orderData.keyId.includes("mockkey")) {
-      callbacks.onFailure?.({
-        code: "SDK_ERROR",
-        description: sdkErr?.message || "Razorpay payment window failed to initialize. Please check your connection and try again.",
-      })
-    } else {
-      openSandboxSimulationModal(orderData, callbacks)
-    }
+    callbacks.onFailure?.({
+      code: "SDK_ERROR",
+      description:
+        sdkErr?.message ||
+        "Razorpay payment window failed to initialize. Please check your connection and try again.",
+    })
   }
 }
 

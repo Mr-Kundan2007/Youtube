@@ -16,6 +16,7 @@ import {
   Play,
   LayoutDashboard,
   LogIn,
+  CreditCard,
 } from "lucide-react"
 import {
   SubscriptionPlan,
@@ -202,13 +203,16 @@ export const PurchaseConfirmationModal: React.FC<PurchaseConfirmationModalProps>
       return
     }
 
-    // Pre-check authentication: verify user has an active token
+    // Pre-check authentication: verify user has an active token or user profile
     const token =
       typeof window !== "undefined"
-        ? localStorage.getItem("token") || localStorage.getItem("Profile") || localStorage.getItem("profile")
+        ? localStorage.getItem("token") ||
+          localStorage.getItem("Profile") ||
+          localStorage.getItem("profile") ||
+          localStorage.getItem("user")
         : null
 
-    if (!token) {
+    if (!token && !userEmail && !userName) {
       setPaymentState("session_expired")
       return
     }
@@ -239,7 +243,7 @@ export const PurchaseConfirmationModal: React.FC<PurchaseConfirmationModalProps>
         orderId: order.orderId,
       })
 
-      // 2. Open Razorpay Test Mode checkout safely
+      // 2. Open official Razorpay checkout modal
       await openRazorpayCheckout(
         order,
         {
@@ -257,13 +261,31 @@ export const PurchaseConfirmationModal: React.FC<PurchaseConfirmationModalProps>
                 razorpay_payment_id: resp.razorpay_payment_id,
                 razorpay_order_id: resp.razorpay_order_id,
                 razorpay_signature: resp.razorpay_signature,
+                planKey: plan.slug,
+                planName: plan.name,
+                validityType: selectedCycle,
+                amount: pricing.price,
               })
 
               setVerifiedData(verifyRes)
               setPaymentState("payment_success")
 
-              // Notify rest of the app to refresh user subscription cache
+              // Save to localStorage immediately so client UI refreshes
               if (typeof window !== "undefined") {
+                const subObj = {
+                  plan: plan.slug,
+                  currentPlan: {
+                    name: plan.name,
+                    slug: plan.slug,
+                    validityType: selectedCycle,
+                    price: pricing.price,
+                  },
+                  status: "active",
+                  expiryDate: verifyRes.expiresAt,
+                  remainingDays:
+                    selectedCycle === "yearly" ? 365 : selectedCycle === "quarterly" ? 90 : 30,
+                }
+                localStorage.setItem("active_subscription", JSON.stringify(subObj))
                 window.dispatchEvent(new CustomEvent("subscription_updated"))
               }
             } catch (vErr: any) {
@@ -395,8 +417,8 @@ export const PurchaseConfirmationModal: React.FC<PurchaseConfirmationModalProps>
           <X className="w-5 h-5" />
         </button>
 
-        {/* STATE: CREATING ORDER / OPENING PAYMENT */}
-        {(paymentState === "creating_order" || paymentState === "opening_payment") && (
+        {/* STATE: CREATING ORDER */}
+        {paymentState === "creating_order" && (
           <div className="text-center py-12 space-y-5">
             <div className="relative w-16 h-16 mx-auto">
               <Loader2 className="w-16 h-16 text-red-500 animate-spin" />
@@ -405,18 +427,58 @@ export const PurchaseConfirmationModal: React.FC<PurchaseConfirmationModalProps>
               </div>
             </div>
             <div className="space-y-2">
-              <h3 className="text-xl font-bold text-white">
-                {paymentState === "creating_order"
-                  ? "Preparing Secure Payment..."
-                  : "Opening Payment Window..."}
-              </h3>
+              <h3 className="text-xl font-bold text-white">Preparing Secure Payment...</h3>
               <p className="text-sm text-neutral-400 max-w-xs mx-auto">
-                Setting up your secure Razorpay Test Mode checkout for {plan.name} ({selectedCycle}).
+                Setting up your official Razorpay order for {plan.name} ({selectedCycle}).
               </p>
             </div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-800/80 border border-neutral-700 text-xs text-neutral-300">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              <span>Razorpay Test Mode</span>
+          </div>
+        )}
+
+        {/* STATE: OPENING PAYMENT / GATEWAY ACTIVE */}
+        {paymentState === "opening_payment" && (
+          <div className="text-center py-8 space-y-5">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-red-600 to-rose-600 flex items-center justify-center text-white mx-auto shadow-xl shadow-red-600/30 animate-pulse">
+              <CreditCard className="w-8 h-8" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl sm:text-2xl font-black text-white">Razorpay Checkout Active</h3>
+              <p className="text-xs sm:text-sm text-neutral-300 max-w-sm mx-auto leading-relaxed">
+                Please complete your transaction in the Razorpay checkout window (UPI QR, Cards, or NetBanking).
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-neutral-950/80 border border-neutral-800 text-xs text-neutral-400 max-w-sm mx-auto space-y-1.5 text-left">
+              <div className="flex justify-between">
+                <span>Plan:</span>
+                <span className="font-semibold text-white uppercase">{plan.name} ({selectedCycle})</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Amount:</span>
+                <span className="font-bold text-emerald-400">{formatPrice(pricing.price, plan.currency)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Order Reference:</span>
+                <span className="font-mono text-neutral-300">{currentOrder?.orderId || "Creating..."}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2 max-w-sm mx-auto">
+              <button
+                type="button"
+                onClick={handleStartPayment}
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-bold shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <RotateCcw className="w-4 h-4" />
+                <span>Re-open Razorpay</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentState("review")}
+                className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-xs font-semibold cursor-pointer"
+              >
+                Cancel Payment
+              </button>
             </div>
           </div>
         )}
@@ -891,21 +953,22 @@ export const PurchaseConfirmationModal: React.FC<PurchaseConfirmationModalProps>
                 <div className="flex flex-col sm:flex-row items-center gap-3 pt-3">
                   <button
                     type="button"
+                    onClick={handleStartPayment}
+                    className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-sm font-bold shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 transition cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Renew / Extend Plan</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => {
                       handleModalClose()
                       router.push("/explore")
                     }}
-                    className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-sm font-bold shadow-lg shadow-red-600/30 flex items-center justify-center gap-2 transition cursor-pointer"
+                    className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
                   >
-                    <Play className="w-4 h-4" />
+                    <Play className="w-4 h-4 text-red-500" />
                     <span>Start Watching</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleModalClose}
-                    className="w-full sm:flex-1 py-3 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-sm font-semibold transition cursor-pointer"
-                  >
-                    Close
                   </button>
                 </div>
               </div>
@@ -1118,11 +1181,11 @@ export const PurchaseConfirmationModal: React.FC<PurchaseConfirmationModalProps>
                   </div>
                 )}
 
-                {/* Razorpay Test Mode Badge Notice */}
+                {/* Razorpay Gateway Badge Notice */}
                 <div className="flex items-start gap-2.5 p-3 rounded-xl bg-neutral-950 border border-neutral-800 text-neutral-400 text-xs mb-5 leading-relaxed">
                   <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
                   <span>
-                    <strong>Razorpay Test Mode:</strong> Secured order generation and server-side HMAC verification. No real funds are charged.
+                    <strong>Razorpay Secure Checkout:</strong> 256-bit encrypted gateway with server-side HMAC-SHA256 signature verification. Supports UPI QR, Cards, and NetBanking.
                   </span>
                 </div>
 

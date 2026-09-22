@@ -52,7 +52,6 @@ export default function Document() {
     <Html lang="en" suppressHydrationWarning>
       <Head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
-        <script src="https://checkout.razorpay.com/v1/checkout.js" async />
       </Head>
       <body className="antialiased bg-[var(--background)] text-[var(--foreground)]">
         <Main />

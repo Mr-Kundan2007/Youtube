@@ -27,7 +27,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
-    const { transactionId, razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body || {}
+    const {
+      transactionId,
+      razorpay_payment_id,
+      razorpay_order_id,
+      razorpay_signature,
+      planKey = "silver",
+      planName = "Silver",
+      validityType = "monthly",
+      amount = 499,
+    } = req.body || {}
 
     const secret = process.env.RAZORPAY_KEY_SECRET || ""
 
@@ -46,33 +55,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({
         success: false,
         code: "SIGNATURE_VERIFICATION_FAILED",
-        message: "Payment signature verification failed. Your card/account was not verified.",
+        message: "Payment signature verification failed. Your payment was not verified by Razorpay.",
       })
     }
 
     const now = new Date()
-    const expiry = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+    const daysToAdd = validityType === "yearly" ? 365 : validityType === "quarterly" ? 90 : 30
+    const expiry = new Date(now.getTime() + daysToAdd * 24 * 60 * 60 * 1000)
     const invoiceNum = `INV-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`
+    const finalPlanKey = String(planKey).toLowerCase()
+    const finalPlanName = planName || finalPlanKey.charAt(0).toUpperCase() + finalPlanKey.slice(1)
 
     return res.status(200).json({
       success: true,
       data: {
         verified,
-        plan: "silver",
-        planName: "Silver",
+        plan: finalPlanKey,
+        planName: finalPlanName,
         expiresAt: expiry.toISOString(),
         startDate: now.toISOString(),
         invoiceNumber: invoiceNum,
         transactionId: transactionId || `txn_${Date.now()}`,
         subscription: {
-          plan: "silver",
+          plan: finalPlanKey,
           status: "active",
           startDate: now.toISOString(),
           expiryDate: expiry.toISOString(),
         },
         invoice: {
           invoiceNumber: invoiceNum,
-          amount: 499,
+          amount: Number(amount) || 499,
           currency: "INR",
         },
       },
