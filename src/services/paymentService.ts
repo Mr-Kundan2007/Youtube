@@ -70,10 +70,15 @@ export interface VerifyPaymentPayload {
   razorpay_payment_id: string
   razorpay_order_id: string
   razorpay_signature: string
+  planKey?: string
+  planName?: string
+  validityType?: string
+  amount?: number
 }
 
 export interface VerifyPaymentResponse {
   verified: boolean
+  message?: string
   alreadyProcessed?: boolean
   plan: string
   planName: string
