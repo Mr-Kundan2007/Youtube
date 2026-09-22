@@ -29,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { transactionId, razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body || {}
 
-    const secret = process.env.RAZORPAY_KEY_SECRET || "offfCXTLPh96q52TtPTBM9jC"
+    const secret = process.env.RAZORPAY_KEY_SECRET || ""
 
     let verified = false
     if (razorpay_order_id && razorpay_payment_id && razorpay_signature) {

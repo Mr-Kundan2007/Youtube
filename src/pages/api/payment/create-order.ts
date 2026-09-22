@@ -53,8 +53,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const internalTransactionId = `PAY-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`
     const receipt = `rcpt_${internalTransactionId}`
-    const keyId = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "rzp_live_TfAubcRfFmUfVA"
-    const keySecret = process.env.RAZORPAY_KEY_SECRET || "offfCXTLPh96q52TtPTBM9jC"
+    const keyId = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || ""
+    const keySecret = process.env.RAZORPAY_KEY_SECRET || ""
 
     let orderId = ""
 

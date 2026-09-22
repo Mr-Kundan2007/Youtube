@@ -3,9 +3,7 @@ import dotenv from "dotenv"
 
 dotenv.config()
 
-const DB_URI =
-  process.env.DB_URL ||
-  "mongodb+srv://kundank82522_db_user:kZPAyo7MflLEh3UW@cluster0.oeaqyqq.mongodb.net/youtube?retryWrites=true&w=majority&appName=Cluster0"
+const DB_URI = process.env.DB_URL || "mongodb://localhost:27017/youtube"
 
 /**
  * Migration: Phase 11 Database Query Performance Optimization Indexes

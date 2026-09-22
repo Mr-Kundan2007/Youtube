@@ -1,9 +1,7 @@
 import mongoose from "mongoose"
 import { assertTestEnvironmentSafety } from "./testEnv.js"
 
-const DB_URI =
-  process.env.DB_URL ||
-  "mongodb+srv://kundank82522_db_user:kZPAyo7MflLEh3UW@cluster0.oeaqyqq.mongodb.net/youtube_test?retryWrites=true&w=majority&appName=Cluster0"
+const DB_URI = process.env.DB_URL || "mongodb://localhost:27017/youtube_test"
 
 /**
  * Connects to MongoDB in test mode with environment safety checks.
