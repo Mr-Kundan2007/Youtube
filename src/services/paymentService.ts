@@ -114,6 +114,10 @@ const API_BASE_URL =
 
 const resolveUrl = (path: string): string => {
   if (path.startsWith("http://") || path.startsWith("https://")) return path
+  // Keep Next.js native API routes on same-origin (port 3000)
+  if (path.startsWith("/api/payment/") || path.startsWith("/api/subscriptions/")) {
+    return path
+  }
   if (typeof window !== "undefined" && API_BASE_URL && API_BASE_URL.startsWith("http")) {
     return `${API_BASE_URL.replace(/\/$/, "")}/${path.replace(/^\//, "")}`
   }
